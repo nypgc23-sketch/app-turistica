@@ -20,7 +20,7 @@ import Login from './pages/Login'
 import RestablecerPassword from './pages/RestablecerPassword'
 import Dashboard from './pages/Dashboard'
 import Perfil from './pages/Perfil'
-import AdminPanel from './pages/AdminPanel' // <--- 1. Importado aquí
+import AdminPanel from './pages/AdminPanel' 
 import { MapPin, Landmark, UtensilsCrossed, CalendarDays, BookOpen, Route, Mail, Phone, Eye, EyeOff } from 'lucide-react'
 
 type Pantalla =
@@ -43,7 +43,7 @@ type Pantalla =
   | 'favoritos'
   | 'restablecer'
   | 'perfil'
-  | 'admin' // <--- 2. Añadido al tipo Pantalla
+  | 'admin'
 
 export default function App() {
   const [pantalla, setPantalla] = useState<Pantalla>('inicio')
@@ -304,13 +304,17 @@ export default function App() {
     case 'restablecer':
       return <RestablecerPassword login={() => setPantalla('login')} />
 
-    case 'dashboard':
+  case 'dashboard':
       return (
         <Dashboard
           mapa={irMapa}
           lugares={irLugares}
           gastronomia={() => setPantalla('gastronomia')}
           eventos={() => setPantalla('eventos')}
+          misEventos={() => {
+            setOrigenMisEventos('dashboard')
+            setPantalla('misEventos')
+          }}
           historia={() => setPantalla('historia')}
           favoritos={irFavoritos}
           misRutas={() => setPantalla('misRutas')}
@@ -342,6 +346,7 @@ export default function App() {
               setOrigenMisEventos('perfil')
               setPantalla('misEventos')
             }}
+            cambiarPantalla={(p) => setPantalla(p as any)}
           />
           {sesionActiva && (
             <NavegacionInferior
@@ -539,6 +544,7 @@ export default function App() {
         </>
       )
 
+    // CARTELERA GENERAL DE EVENTOS
     case 'eventos':
       return (
         <>
@@ -563,6 +569,7 @@ export default function App() {
         </>
       )
 
+    // AGENDA PERSONAL EXCLUSIVA DEL USUARIO (MIS EVENTOS)
     case 'misEventos':
       return (
         <>

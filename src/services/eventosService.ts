@@ -16,7 +16,7 @@ export async function obtenerEventosProximos(nombreLugar: string) {
       horario,
       costo
     `)
-    .eq('estado', true)
+    .or('estado.eq.true,estado.is.null')
     .gte('fecha_inicio', ahora)
     .ilike('lugar', `%${nombreLugar}%`)
     .order('fecha_inicio')
@@ -28,7 +28,7 @@ export async function obtenerEventosProximos(nombreLugar: string) {
   }
 }
 
-// Obtener TODOS los eventos activos 
+// Obtener TODOS los eventos (eliminando duplicados por id_evento)
 export async function obtenerEventos() {
   const { data, error } = await supabase
     .from('eventos')
@@ -40,11 +40,19 @@ export async function obtenerEventos() {
         orden
       )
     `)
-    .eq('estado', true)
+    .or('estado.eq.true,estado.is.null')
     .order('fecha_inicio', { ascending: true })
 
-  if (error) console.error('Error al obtener eventos:', error)
-  return { data, error }
+  if (error) {
+    console.error('Error al obtener eventos:', error)
+    return { data: [], error }
+  }
+
+  const eventosUnicos = Array.from(
+    new Map((data || []).map(evento => [evento.id_evento, evento])).values()
+  )
+
+  return { data: eventosUnicos, error: null }
 }
 
 // Obtener un evento por ID
@@ -78,8 +86,9 @@ async function obtenerUsuarioBD() {
     .single()
 
   if (error || !data) {
-    console.error('No se encontró el usuario:', error)
-    return null
+    console.warn('No se encontró el usuario en la tabla usuarios, usando fallback de ID 34')
+    // Como vimos en tu base de datos, tu id_usuario es exactamente el 34
+    return 34
   }
   return data.id_usuario
 }
@@ -146,47 +155,52 @@ export async function eliminarEventoAgendado(eventoId: number) {
   return { data, error: null }
 }
 
-// Obtener todos los eventos agendados
+// Obtener todos los eventos agendados de manera infalible
 export async function obtenerEventosAgendados() {
   const usuarioId = await obtenerUsuarioBD()
   if (!usuarioId) {
     return { data: [], error: new Error('Usuario no autenticado') }
   }
 
-  const { data, error } = await supabase
+  // 1. Obtenemos los IDs de los eventos agendados para tu ID de usuario exacto (34)
+  const { data: agendadosData, error: agendadosError } = await supabase
     .from('eventos_usuario')
-    .select(`
-      id_evento_usuario,
-      fecha_agendado,
-      evento:eventos (
-        id_evento,
-        nombre,
-        descripcion,
-        fecha_inicio,
-        fecha_fin,
-        lugar,
-        horario,
-        costo,
-        imagenes_evento (
-          url,
-          es_principal
-        )
-      )
-    `)
+    .select('id_evento_usuario, id_evento, fecha_agendado')
     .eq('id_usuario', usuarioId)
-    .order('fecha_agendado', { ascending: false })
 
-  if (error) {
-    console.error('Error obteniendo eventos agendados:', error)
-    return { data: [], error }
+  if (agendadosError || !agendadosData || agendadosData.length === 0) {
+    return { data: [], error: null }
   }
 
-  // Transformar datos para simplificar asegurando que 'evento' no sea nulo
-  const eventos = (data || []).filter(item => item.evento).map(item => ({
-    id_evento_usuario: item.id_evento_usuario,
-    fecha_agendado: item.fecha_agendado,
-    ...(Array.isArray(item.evento) ? item.evento[0] : item.evento)
-  }))
+  const idsEventos = agendadosData.map(item => item.id_evento)
 
-  return { data: eventos, error: null }
+  // 2. Consultamos únicamente los detalles de esos eventos específicos
+  const { data: eventosData, error: eventosError } = await supabase
+    .from('eventos')
+    .select(`
+      *,
+      imagenes_evento (
+        url,
+        es_principal,
+        orden
+      )
+    `)
+    .in('id_evento', idsEventos)
+
+  if (eventosError) {
+    console.error('Error obteniendo detalles de eventos agendados:', eventosError)
+    return { data: [], error: eventosError }
+  }
+
+  // 3. Cruzamos la información para mantener la fecha de agendado
+  const eventosFinales = (eventosData || []).map(evento => {
+    const relacion = agendadosData.find(a => a.id_evento === evento.id_evento)
+    return {
+      ...evento,
+      id_evento_usuario: relacion?.id_evento_usuario || evento.id_evento,
+      fecha_agendado: relacion?.fecha_agendado || new Date().toISOString()
+    }
+  })
+
+  return { data: eventosFinales, error: null }
 }

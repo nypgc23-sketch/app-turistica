@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { 
-  ShieldCheck, ArrowLeft, Trash2, Edit3, Plus, AlertTriangle, Check, X, MapPin, Search, Utensils, Image as ImageIcon 
+  ShieldCheck, ArrowLeft, Trash2, Edit3, Plus, AlertTriangle, Check, X, MapPin, Search, Utensils, Image as ImageIcon, Calendar 
 } from 'lucide-react'
 
 type AdminPanelProps = {
@@ -30,6 +30,15 @@ export default function AdminPanel({ volver }: AdminPanelProps) {
 
   const [itemEditando, setItemEditando] = useState<any | null>(null)
   const [creandoNuevo, setCreandoNuevo] = useState(false)
+
+  // Estados para gastronomía
+  const [lugaresSeleccionados, setLugaresSeleccionados] = useState<number[]>([])
+  const [tipoDisponibilidad, setTipoDisponibilidad] = useState<string>('Todo el año')
+  const [temporadaSeleccionada, setTemporadaSeleccionada] = useState<string>('Septiembre - Octubre')
+  const [urlImagenInput, setUrlImagenInput] = useState<string>('')
+
+  // Estados para eventos (imagen)
+  const [urlImagenEventoInput, setUrlImagenEventoInput] = useState<string>('')
 
   // Estados para el mapa interactivo y campos del formulario de lugares
   const [latSelected, setLatSelected] = useState<number>(19.0586)
@@ -85,6 +94,50 @@ export default function AdminPanel({ volver }: AdminPanelProps) {
       montado = false
     }
   }, [])
+
+  // Cargar relaciones de lugares, temporada e imágenes al editar
+  useEffect(() => {
+    async function cargarRelacionesGastro() {
+      if (itemEditando && seccion === 'gastronomia') {
+        const temp = itemEditando.temporada || 'Todo el año'
+        if (temp.toLowerCase().includes('todo') || temp.toLowerCase().includes('año')) {
+          setTipoDisponibilidad('Todo el año')
+          setTemporadaSeleccionada('Septiembre - Octubre')
+        } else {
+          setTipoDisponibilidad('Temporada Especial')
+          setTemporadaSeleccionada(temp)
+        }
+
+        const imgs = itemEditando.categoriaGastro === 'Platillo' ? itemEditando.imagenes_platillo : itemEditando.imagenes_bebida
+        if (imgs && imgs.length > 0) {
+          setUrlImagenInput(imgs[0].url || '')
+        } else {
+          setUrlImagenInput('')
+        }
+
+        const tablaRel = itemEditando.categoriaGastro === 'Platillo' ? 'platillos_lugares' : 'bebidas_lugares'
+        const idField = itemEditando.categoriaGastro === 'Platillo' ? 'id_platillo' : 'id_bebida'
+        
+        const { data } = await supabase
+          .from(tablaRel)
+          .select('id_lugar')
+          .eq(idField, itemEditando.id_real)
+
+        if (data) {
+          setLugaresSeleccionados(data.map((r: any) => r.id_lugar))
+        }
+      } else if (itemEditando && seccion === 'eventos') {
+        setUrlImagenEventoInput(itemEditando.imagen || '')
+      } else {
+        setLugaresSeleccionados([])
+        setTipoDisponibilidad('Todo el año')
+        setTemporadaSeleccionada('Septiembre - Octubre')
+        setUrlImagenInput('')
+        setUrlImagenEventoInput('')
+      }
+    }
+    cargarRelacionesGastro()
+  }, [itemEditando, seccion])
 
   // Inicializar mapa interactivo cuando se abre el modal de lugares
   useEffect(() => {
@@ -155,15 +208,8 @@ export default function AdminPanel({ volver }: AdminPanelProps) {
       return
     }
 
-    if (direccionInput.includes('goo.gl') || direccionInput.includes('share.google')) {
-      setMensajeForm('Enlace detectado. Ubicando en Cholula (ajusta el pin si lo requieres)...')
-      setTipoMensajeForm('exito')
-      actualizarMapaCoordenadas(19.0586, -98.3038, 'Enlace registrado. Ajusta el pin en el mapa.')
-      return
-    }
-
     try {
-      setMensajeForm('Buscando dirección o código postal...')
+      setMensajeForm('Buscando dirección...')
       setTipoMensajeForm('exito')
       const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(direccionInput + ', Cholula, Puebla, México')}`)
       const data = await res.json()
@@ -173,7 +219,7 @@ export default function AdminPanel({ volver }: AdminPanelProps) {
         const lng = parseFloat(data[0].lon)
         actualizarMapaCoordenadas(lat, lng, '¡Ubicación actualizada en el mapa!')
       } else {
-        setMensajeForm('No se localizó exactamente. Puedes ajustar el marcador manualmente en el mapa.')
+        setMensajeForm('No se localizó exactamente. Ajusta el marcador en el mapa.')
         setTipoMensajeForm('error')
       }
     } catch (err) {
@@ -248,17 +294,31 @@ export default function AdminPanel({ volver }: AdminPanelProps) {
         horario,
         costo,
         temporada,
+        imagen: urlImagenEventoInput.trim(),
         estado: true
       }
 
       if (itemEditando) {
         const { error } = await supabase.from('eventos').update(payloadEvento).eq('id_evento', itemEditando.id_evento)
-        if (error) { setMensajeForm('Error al actualizar evento: ' + error.message); setTipoMensajeForm('error'); return }
+        if (error) { 
+          // Si la columna temporada o imagen no existen en la BD todavía, reintentamos sin ellas de forma segura
+          delete payloadEvento.temporada
+          delete payloadEvento.imagen
+          const { error: errAlt } = await supabase.from('eventos').update(payloadEvento).eq('id_evento', itemEditando.id_evento)
+          if (errAlt) { setMensajeForm('Error al actualizar evento: ' + errAlt.message); setTipoMensajeForm('error'); return }
+        }
         setEventos(prev => prev.map(ev => ev.id_evento === itemEditando.id_evento ? { ...ev, ...payloadEvento } : ev))
       } else {
         const { data, error } = await supabase.from('eventos').insert(payloadEvento).select().single()
-        if (error || !data) { setMensajeForm('Error al crear evento: ' + (error?.message || 'Desconocido')); setTipoMensajeForm('error'); return }
-        setEventos(prev => [data, ...prev])
+        if (error || !data) { 
+          delete payloadEvento.temporada
+          delete payloadEvento.imagen
+          const { data: dataAlt, error: errAlt } = await supabase.from('eventos').insert(payloadEvento).select().single()
+          if (errAlt || !dataAlt) { setMensajeForm('Error al crear evento: ' + (errAlt?.message || 'Desconocido')); setTipoMensajeForm('error'); return }
+          setEventos(prev => [dataAlt, ...prev])
+        } else {
+          setEventos(prev => [data, ...prev])
+        }
       }
     } else {
       // Gastronomía (Platillo o Bebida)
@@ -266,7 +326,8 @@ export default function AdminPanel({ volver }: AdminPanelProps) {
       const preparacion = formData.get('preparacion') as string
       const ingredientesInput = formData.get('ingredientes') as string
       const ingredientes = ingredientesInput ? ingredientesInput.split(',').map(i => i.trim()) : []
-      const urlImagen = formData.get('url_imagen') as string
+      
+      const temporadaFinal = tipoDisponibilidad === 'Todo el año' ? 'Todo el año' : temporadaSeleccionada
 
       if (tipoGastro === 'Platillo') {
         const payloadPlatillo: any = {
@@ -274,45 +335,58 @@ export default function AdminPanel({ volver }: AdminPanelProps) {
           descripcion,
           preparacion,
           ingredientes,
+          temporada: temporadaFinal,
           estado: true
         }
 
-        if (itemEditando && itemEditando.categoriaGastro === 'Platillo') {
-          const { error } = await supabase.from('platillos').update(payloadPlatillo).eq('id_platillo', itemEditando.id_real)
-          if (error) { setMensajeForm('Error al actualizar: ' + error.message); setTipoMensajeForm('error'); return }
-          
-          if (urlImagen.trim()) {
-            await supabase.from('imagenes_platillo').delete().eq('id_platillo', itemEditando.id_real)
-            await supabase.from('imagenes_platillo').insert({
-              id_platillo: itemEditando.id_real,
-              url: urlImagen.trim(),
-              es_principal: true,
-              orden: 1
-            })
-          }
+        let idPlatilloReal = itemEditando?.categoriaGastro === 'Platillo' ? itemEditando.id_real : null
 
-          setGastronomia(prev => prev.map(g => g.id_real === itemEditando.id_real && g.categoriaGastro === 'Platillo' ? { ...g, ...payloadPlatillo } : g))
+        if (itemEditando && itemEditando.categoriaGastro === 'Platillo') {
+          const { error } = await supabase.from('platillos').update(payloadPlatillo).eq('id_platillo', idPlatilloReal)
+          if (error) {
+            delete payloadPlatillo.temporada
+            await supabase.from('platillos').update(payloadPlatillo).eq('id_platillo', idPlatilloReal)
+          }
         } else {
           if (itemEditando) {
             await supabase.from('bebidas').delete().eq('id_bebida', itemEditando.id_real)
           }
           const { data, error } = await supabase.from('platillos').insert(payloadPlatillo).select().single()
-          if (error || !data) { setMensajeForm('Error al crear platillo: ' + (error?.message || 'Desconocido')); setTipoMensajeForm('error'); return }
-          
-          if (urlImagen.trim()) {
-            await supabase.from('imagenes_platillo').insert({
-              id_platillo: data.id_platillo,
-              url: urlImagen.trim(),
-              es_principal: true,
-              orden: 1
-            })
+          if (error || !data) {
+            delete payloadPlatillo.temporada
+            const { data: dataAlt, error: errAlt } = await supabase.from('platillos').insert(payloadPlatillo).select().single()
+            if (errAlt || !dataAlt) { setMensajeForm('Error al crear platillo'); setTipoMensajeForm('error'); return }
+            idPlatilloReal = dataAlt.id_platillo
+          } else {
+            idPlatilloReal = data.id_platillo
           }
-
-          setGastronomia(prev => [
-            { ...data, categoriaGastro: 'Platillo', id_real: data.id_platillo }, 
-            ...prev.filter(g => !(itemEditando && g.id_real === itemEditando.id_real && g.categoriaGastro === itemEditando.categoriaGastro))
-          ])
         }
+
+        if (urlImagenInput.trim() && idPlatilloReal) {
+          await supabase.from('imagenes_platillo').delete().eq('id_platillo', idPlatilloReal)
+          await supabase.from('imagenes_platillo').insert({
+            id_platillo: idPlatilloReal,
+            url: urlImagenInput.trim(),
+            es_principal: true,
+            orden: 1
+          })
+        }
+
+        if (idPlatilloReal) {
+          await supabase.from('platillos_lugares').delete().eq('id_platillo', idPlatilloReal)
+          if (lugaresSeleccionados.length > 0) {
+            const rels = lugaresSeleccionados.map(idLugar => ({ id_platillo: idPlatilloReal, id_lugar: idLugar }))
+            await supabase.from('platillos_lugares').insert(rels)
+          }
+        }
+
+        const { data: platilloActualizado } = await supabase.from('platillos').select('*, imagenes_platillo(*)').eq('id_platillo', idPlatilloReal).single()
+        
+        setGastronomia(prev => [
+          { ...platilloActualizado, categoriaGastro: 'Platillo', id_real: idPlatilloReal, temporada: temporadaFinal },
+          ...prev.filter(g => !(itemEditando && g.id_real === itemEditando.id_real && g.categoriaGastro === itemEditando.categoriaGastro))
+        ])
+
       } else {
         const payloadBebida: any = {
           nombre,
@@ -320,45 +394,57 @@ export default function AdminPanel({ volver }: AdminPanelProps) {
           tipo_bebida: 'Bebida tradicional',
           preparacion,
           ingredientes,
+          temporada: temporadaFinal,
           estado: true
         }
 
+        let idBebidaReal = itemEditando?.categoriaGastro === 'Bebida' ? itemEditando.id_real : null
+
         if (itemEditando && itemEditando.categoriaGastro === 'Bebida') {
-          const { error } = await supabase.from('bebidas').update(payloadBebida).eq('id_bebida', itemEditando.id_real)
-          if (error) { setMensajeForm('Error al actualizar: ' + error.message); setTipoMensajeForm('error'); return }
-
-          if (urlImagen.trim()) {
-            await supabase.from('imagenes_bebida').delete().eq('id_bebida', itemEditando.id_real)
-            await supabase.from('imagenes_bebida').insert({
-              id_bebida: itemEditando.id_real,
-              url: urlImagen.trim(),
-              es_principal: true,
-              orden: 1
-            })
+          const { error } = await supabase.from('bebidas').update(payloadBebida).eq('id_bebida', idBebidaReal)
+          if (error) {
+            delete payloadBebida.temporada
+            await supabase.from('bebidas').update(payloadBebida).eq('id_bebida', idBebidaReal)
           }
-
-          setGastronomia(prev => prev.map(g => g.id_real === itemEditando.id_real && g.categoriaGastro === 'Bebida' ? { ...g, ...payloadBebida } : g))
         } else {
           if (itemEditando) {
             await supabase.from('platillos').delete().eq('id_platillo', itemEditando.id_real)
           }
           const { data, error } = await supabase.from('bebidas').insert(payloadBebida).select().single()
-          if (error || !data) { setMensajeForm('Error al crear bebida: ' + (error?.message || 'Desconocido')); setTipoMensajeForm('error'); return }
-
-          if (urlImagen.trim()) {
-            await supabase.from('imagenes_bebida').insert({
-              id_bebida: data.id_bebida,
-              url: urlImagen.trim(),
-              es_principal: true,
-              orden: 1
-            })
+          if (error || !data) {
+            delete payloadBebida.temporada
+            const { data: dataAlt, error: errAlt } = await supabase.from('bebidas').insert(payloadBebida).select().single()
+            if (errAlt || !dataAlt) { setMensajeForm('Error al crear bebida'); setTipoMensajeForm('error'); return }
+            idBebidaReal = dataAlt.id_bebida
+          } else {
+            idBebidaReal = data.id_bebida
           }
-
-          setGastronomia(prev => [
-            { ...data, categoriaGastro: 'Bebida', id_real: data.id_bebida }, 
-            ...prev.filter(g => !(itemEditando && g.id_real === itemEditando.id_real && g.categoriaGastro === itemEditando.categoriaGastro))
-          ])
         }
+
+        if (urlImagenInput.trim() && idBebidaReal) {
+          await supabase.from('imagenes_bebida').delete().eq('id_bebida', idBebidaReal)
+          await supabase.from('imagenes_bebida').insert({
+            id_bebida: idBebidaReal,
+            url: urlImagenInput.trim(),
+            es_principal: true,
+            orden: 1
+          })
+        }
+
+        if (idBebidaReal) {
+          await supabase.from('bebidas_lugares').delete().eq('id_bebida', idBebidaReal)
+          if (lugaresSeleccionados.length > 0) {
+            const rels = lugaresSeleccionados.map(idLugar => ({ id_bebida: idBebidaReal, id_lugar: idLugar }))
+            await supabase.from('bebidas_lugares').insert(rels)
+          }
+        }
+
+        const { data: bebidaActualizada } = await supabase.from('bebidas').select('*, imagenes_bebida(*)').eq('id_bebida', idBebidaReal).single()
+
+        setGastronomia(prev => [
+          { ...bebidaActualizada, categoriaGastro: 'Bebida', id_real: idBebidaReal, temporada: temporadaFinal },
+          ...prev.filter(g => !(itemEditando && g.id_real === itemEditando.id_real && g.categoriaGastro === itemEditando.categoriaGastro))
+        ])
       }
     }
 
@@ -389,6 +475,11 @@ export default function AdminPanel({ volver }: AdminPanelProps) {
 
   function abrirNuevo() {
     setItemEditando(null)
+    setLugaresSeleccionados([])
+    setTipoDisponibilidad('Todo el año')
+    setTemporadaSeleccionada('Septiembre - Octubre')
+    setUrlImagenInput('')
+    setUrlImagenEventoInput('')
     setCreandoNuevo(true)
   }
 
@@ -396,6 +487,9 @@ export default function AdminPanel({ volver }: AdminPanelProps) {
     setCreandoNuevo(false)
     setItemEditando(null)
     setMensajeForm(null)
+    setLugaresSeleccionados([])
+    setUrlImagenInput('')
+    setUrlImagenEventoInput('')
   }
 
   if (cargando) {
@@ -420,9 +514,10 @@ export default function AdminPanel({ volver }: AdminPanelProps) {
   }
 
   const listaActual = seccion === 'lugares' ? lugares : seccion === 'eventos' ? eventos : gastronomia
+  const lugaresParaComer = lugares.filter(l => Number(l.categoria_id) === 7 || Number(l.categoria_id) === 8 || l.nombre.toLowerCase().includes('mercado') || l.nombre.toLowerCase().includes('restaurante'))
 
   return (
-    <main style={{ padding: '24px', maxWidth: '700px', margin: '0 auto', paddingBottom: '90px', fontFamily: 'inherit', backgroundColor: '#fdfbfa', minHeight: '100vh' }}>
+    <main style={{ padding: '24px', maxWidth: '750px', margin: '0 auto', paddingBottom: '90px', fontFamily: 'inherit', backgroundColor: '#fdfbfa', minHeight: '100vh' }}>
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', backgroundColor: '#fff', padding: '16px 20px', borderRadius: '16px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)', border: '1px solid #f2ece9' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div style={{ backgroundColor: '#fdf5f5', padding: '10px', borderRadius: '12px' }}>
@@ -441,19 +536,19 @@ export default function AdminPanel({ volver }: AdminPanelProps) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', gap: '10px', flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', gap: '4px', backgroundColor: '#f2ece9', padding: '4px', borderRadius: '12px' }}>
           <button
-            onClick={() => { setSeccion('lugares'); cerrarModalForm(); }}
+            onClick={() => { seccion !== 'lugares' && setSeccion('lugares'); cerrarModalForm(); }}
             style={{ padding: '8px 14px', borderRadius: '10px', border: 'none', backgroundColor: seccion === 'lugares' ? '#fff' : 'transparent', color: seccion === 'lugares' ? '#400d0f' : '#6e6462', fontWeight: 700, fontSize: '12px', cursor: 'pointer', boxShadow: seccion === 'lugares' ? '0 2px 8px rgba(0,0,0,0.06)' : 'none' }}
           >
             Lugares ({lugares.length})
           </button>
           <button
-            onClick={() => { setSeccion('eventos'); cerrarModalForm(); }}
+            onClick={() => { seccion !== 'eventos' && setSeccion('eventos'); cerrarModalForm(); }}
             style={{ padding: '8px 14px', borderRadius: '10px', border: 'none', backgroundColor: seccion === 'eventos' ? '#fff' : 'transparent', color: seccion === 'eventos' ? '#400d0f' : '#6e6462', fontWeight: 700, fontSize: '12px', cursor: 'pointer', boxShadow: seccion === 'eventos' ? '0 2px 8px rgba(0,0,0,0.06)' : 'none' }}
           >
             Eventos ({eventos.length})
           </button>
           <button
-            onClick={() => { setSeccion('gastronomia'); cerrarModalForm(); }}
+            onClick={() => { seccion !== 'gastronomia' && setSeccion('gastronomia'); cerrarModalForm(); }}
             style={{ padding: '8px 14px', borderRadius: '10px', border: 'none', backgroundColor: seccion === 'gastronomia' ? '#fff' : 'transparent', color: seccion === 'gastronomia' ? '#400d0f' : '#6e6462', fontWeight: 700, fontSize: '12px', cursor: 'pointer', boxShadow: seccion === 'gastronomia' ? '0 2px 8px rgba(0,0,0,0.06)' : 'none' }}
           >
             Gastronomía ({gastronomia.length})
@@ -485,9 +580,9 @@ export default function AdminPanel({ volver }: AdminPanelProps) {
           zIndex: 9999,
           padding: '20px'
         }}>
-          <form onSubmit={handleGuardar} style={{ backgroundColor: '#fff', padding: '28px', borderRadius: '20px', boxShadow: '0 20px 40px rgba(0,0,0,0.15)', display: 'flex', flexDirection: 'column', gap: '14px', width: '100%', maxWidth: '540px', maxHeight: '92vh', overflowY: 'auto', border: '1px solid #f2ece9' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f2ece9', paddingBottom: '10px' }}>
-              <h4 style={{ margin: 0, color: '#400d0f', fontSize: '17px', fontWeight: 700 }}>
+          <form onSubmit={handleGuardar} style={{ backgroundColor: '#fff', padding: '32px', borderRadius: '24px', boxShadow: '0 25px 50px rgba(0,0,0,0.15)', display: 'flex', flexDirection: 'column', gap: '16px', width: '100%', maxWidth: '580px', maxHeight: '92vh', overflowY: 'auto', border: '1px solid #f2ece9' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f2ece9', paddingBottom: '12px' }}>
+              <h4 style={{ margin: 0, color: '#400d0f', fontSize: '18px', fontWeight: 800 }}>
                 {itemEditando ? `Editar ${seccion}` : `Registrar Nuevo en ${seccion}`}
               </h4>
               <button type="button" onClick={cerrarModalForm} style={{ background: '#f2ece9', border: 'none', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={18} color="#400d0f" /></button>
@@ -509,12 +604,12 @@ export default function AdminPanel({ volver }: AdminPanelProps) {
 
             <div>
               <label style={{ fontSize: '12px', fontWeight: 700, color: '#400d0f', display: 'block', marginBottom: '4px' }}>Nombre</label>
-              <input name="nombre" defaultValue={itemEditando?.nombre || ''} required placeholder="Nombre principal" style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1px solid #dcd6d3', fontSize: '13px', outline: 'none' }} />
+              <input name="nombre" defaultValue={itemEditando?.nombre || ''} required placeholder="Nombre principal" style={{ width: '100%', padding: '11px 14px', borderRadius: '12px', border: '1px solid #dcd6d3', fontSize: '13.5px', outline: 'none' }} />
             </div>
 
             <div>
               <label style={{ fontSize: '12px', fontWeight: 700, color: '#400d0f', display: 'block', marginBottom: '4px' }}>Descripción detallada</label>
-              <textarea name="descripcion" defaultValue={itemEditando?.descripcion || ''} rows={2} placeholder="Breve reseña o información" style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1px solid #dcd6d3', fontSize: '13px', outline: 'none', resize: 'vertical' }} />
+              <textarea name="descripcion" defaultValue={itemEditando?.descripcion || ''} rows={2} placeholder="Breve reseña o información" style={{ width: '100%', padding: '11px 14px', borderRadius: '12px', border: '1px solid #dcd6d3', fontSize: '13.5px', outline: 'none', resize: 'vertical' }} />
             </div>
 
             {seccion === 'lugares' ? (
@@ -526,13 +621,13 @@ export default function AdminPanel({ volver }: AdminPanelProps) {
                       name="direccion" 
                       value={direccionInput}
                       onChange={(e) => setDireccionInput(e.target.value)}
-                      placeholder="Ej. 72760 o https://maps.app.goo.gl/..." 
-                      style={{ flex: 1, padding: '10px 14px', borderRadius: '10px', border: '1px solid #dcd6d3', fontSize: '13px', outline: 'none' }} 
+                      placeholder="Ej. Calle Principal #123" 
+                      style={{ flex: 1, padding: '11px 14px', borderRadius: '12px', border: '1px solid #dcd6d3', fontSize: '13.5px', outline: 'none' }} 
                     />
                     <button 
                       type="button" 
                       onClick={handleBuscarUbicacion}
-                      style={{ backgroundColor: '#400d0f', color: '#fff', border: 'none', padding: '0 16px', borderRadius: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', fontWeight: 600, fontSize: '13px' }}
+                      style={{ backgroundColor: '#400d0f', color: '#fff', border: 'none', padding: '0 16px', borderRadius: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', fontWeight: 600, fontSize: '13px' }}
                     >
                       <Search size={16} /> Buscar
                     </button>
@@ -541,99 +636,184 @@ export default function AdminPanel({ volver }: AdminPanelProps) {
 
                 <div>
                   <label style={{ fontSize: '12px', fontWeight: 700, color: '#400d0f', display: 'block', marginBottom: '4px' }}>Categoría</label>
-                  <select name="categoria_id" defaultValue={itemEditando?.categoria_id || categoriasBD[0]?.id_categoria} required style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1px solid #dcd6d3', fontSize: '13px', outline: 'none', backgroundColor: '#fff', cursor: 'pointer' }}>
+                  <select name="categoria_id" defaultValue={itemEditando?.categoria_id || categoriasBD[0]?.id_categoria} required style={{ width: '100%', padding: '11px 14px', borderRadius: '12px', border: '1px solid #dcd6d3', fontSize: '13.5px', outline: 'none', backgroundColor: '#fff', cursor: 'pointer' }}>
                     {categoriasBD.map((cat) => (
                       <option key={cat.id_categoria} value={cat.id_categoria}>{cat.nombre}</option>
                     ))}
                   </select>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                   <div>
                     <label style={{ fontSize: '12px', fontWeight: 700, color: '#400d0f', display: 'block', marginBottom: '4px' }}>Horario</label>
-                    <input name="horario" defaultValue={itemEditando?.horario || ''} placeholder="Ej. 09:00 - 18:00" style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1px solid #dcd6d3', fontSize: '13px', outline: 'none' }} />
+                    <input name="horario" defaultValue={itemEditando?.horario || ''} placeholder="Ej. 09:00 - 18:00" style={{ width: '100%', padding: '11px 12px', borderRadius: '12px', border: '1px solid #dcd6d3', fontSize: '13.5px', outline: 'none' }} />
                   </div>
                   <div>
                     <label style={{ fontSize: '12px', fontWeight: 700, color: '#400d0f', display: 'block', marginBottom: '4px' }}>Costo de Entrada ($)</label>
-                    <input name="costo_entrada" type="number" step="any" defaultValue={itemEditando?.costo_entrada || 0} placeholder="0.00" style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1px solid #dcd6d3', fontSize: '13px', outline: 'none' }} />
+                    <input name="costo_entrada" type="number" step="any" defaultValue={itemEditando?.costo_entrada || 0} placeholder="0.00" style={{ width: '100%', padding: '11px 12px', borderRadius: '12px', border: '1px solid #dcd6d3', fontSize: '13.5px', outline: 'none' }} />
                   </div>
                 </div>
 
                 <div>
                   <label style={{ fontSize: '12px', fontWeight: 700, color: '#400d0f', display: 'block', marginBottom: '4px' }}>Teléfono</label>
-                  <input name="telefono" defaultValue={itemEditando?.telefono || ''} placeholder="Opcional" style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1px solid #dcd6d3', fontSize: '13px', outline: 'none' }} />
+                  <input name="telefono" defaultValue={itemEditando?.telefono || ''} placeholder="Opcional" style={{ width: '100%', padding: '11px 14px', borderRadius: '12px', border: '1px solid #dcd6d3', fontSize: '13.5px', outline: 'none' }} />
                 </div>
 
                 <div>
                   <label style={{ fontSize: '12px', fontWeight: 700, color: '#400d0f', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
                     <MapPin size={16} color="#B3282D" /> Pin en el Mapa:
                   </label>
-                  <div ref={mapRef} style={{ width: '100%', height: '170px', borderRadius: '12px', border: '1px solid #dcd6d3', zIndex: 1 }} />
+                  <div ref={mapRef} style={{ width: '100%', height: '180px', borderRadius: '14px', border: '1px solid #dcd6d3', zIndex: 1 }} />
                 </div>
               </>
             ) : seccion === 'eventos' ? (
               <>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                   <div>
                     <label style={{ fontSize: '12px', fontWeight: 700, color: '#400d0f', display: 'block', marginBottom: '4px' }}>Fecha Inicio</label>
-                    <input name="fecha_inicio" type="datetime-local" defaultValue={itemEditando?.fecha_inicio ? itemEditando.fecha_inicio.slice(0, 16) : ''} style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1px solid #dcd6d3', fontSize: '12px', outline: 'none' }} />
+                    <input name="fecha_inicio" type="datetime-local" defaultValue={itemEditando?.fecha_inicio ? itemEditando.fecha_inicio.slice(0, 16) : ''} style={{ width: '100%', padding: '11px 12px', borderRadius: '12px', border: '1px solid #dcd6d3', fontSize: '12.5px', outline: 'none' }} />
                   </div>
                   <div>
                     <label style={{ fontSize: '12px', fontWeight: 700, color: '#400d0f', display: 'block', marginBottom: '4px' }}>Fecha Fin</label>
-                    <input name="fecha_fin" type="datetime-local" defaultValue={itemEditando?.fecha_fin ? itemEditando.fecha_fin.slice(0, 16) : ''} style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1px solid #dcd6d3', fontSize: '12px', outline: 'none' }} />
+                    <input name="fecha_fin" type="datetime-local" defaultValue={itemEditando?.fecha_fin ? itemEditando.fecha_fin.slice(0, 16) : ''} style={{ width: '100%', padding: '11px 12px', borderRadius: '12px', border: '1px solid #dcd6d3', fontSize: '12.5px', outline: 'none' }} />
                   </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '10px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '12px' }}>
                   <div>
                     <label style={{ fontSize: '12px', fontWeight: 700, color: '#400d0f', display: 'block', marginBottom: '4px' }}>Lugar / Recinto</label>
-                    <input name="lugar" defaultValue={itemEditando?.lugar || ''} placeholder="Ubicación del evento" style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1px solid #dcd6d3', fontSize: '13px', outline: 'none' }} />
+                    <input name="lugar" defaultValue={itemEditando?.lugar || ''} placeholder="Ubicación del evento" style={{ width: '100%', padding: '11px 12px', borderRadius: '12px', border: '1px solid #dcd6d3', fontSize: '13.5px', outline: 'none' }} />
                   </div>
                   <div>
                     <label style={{ fontSize: '12px', fontWeight: 700, color: '#400d0f', display: 'block', marginBottom: '4px' }}>Costo ($)</label>
-                    <input name="costo" type="number" step="any" defaultValue={itemEditando?.costo || 0} placeholder="0.00" style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1px solid #dcd6d3', fontSize: '13px', outline: 'none' }} />
+                    <input name="costo" type="number" step="any" defaultValue={itemEditando?.costo || 0} placeholder="0.00" style={{ width: '100%', padding: '11px 12px', borderRadius: '12px', border: '1px solid #dcd6d3', fontSize: '13.5px', outline: 'none' }} />
                   </div>
                 </div>
 
                 <div>
                   <label style={{ fontSize: '12px', fontWeight: 700, color: '#400d0f', display: 'block', marginBottom: '4px' }}>Temporada</label>
-                  <input name="temporada" defaultValue={itemEditando?.temporada || 'Todo el año'} placeholder="Ej. Todo el año, Feria..." style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1px solid #dcd6d3', fontSize: '13px', outline: 'none' }} />
+                  <input name="temporada" defaultValue={itemEditando?.temporada || 'Todo el año'} placeholder="Ej. Todo el año, Feria..." style={{ width: '100%', padding: '11px 14px', borderRadius: '12px', border: '1px solid #dcd6d3', fontSize: '13.5px', outline: 'none' }} />
+                </div>
+
+                {/* IMAGEN DE EVENTOS */}
+                <div>
+                  <label style={{ fontSize: '12px', fontWeight: 700, color: '#400d0f', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                    <ImageIcon size={15} color="#B3282D" /> Imagen del Evento (.jpg o .png)
+                  </label>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <input 
+                      value={urlImagenEventoInput}
+                      onChange={(e) => setUrlImagenEventoInput(e.target.value)}
+                      placeholder="Pega aquí la URL o sube una imagen..." 
+                      style={{ width: '100%', padding: '11px 14px', borderRadius: '12px', border: '1px solid #dcd6d3', fontSize: '13.5px', outline: 'none', backgroundColor: '#faf9f8' }} 
+                    />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '11.5px', color: '#6e6462', fontWeight: 600 }}>O sube imagen desde tu dispositivo:</span>
+                      <input 
+                        type="file" 
+                        accept="image/jpeg, image/png, image/jpg"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0]
+                          if (file) {
+                            if (!file.type.includes('jpeg') && !file.type.includes('png') && !file.type.includes('jpg')) {
+                              alert('Por favor selecciona únicamente un archivo formato JPG o PNG.')
+                              e.target.value = ''
+                              return
+                            }
+                            const reader = new FileReader()
+                            reader.onload = (uploadEvent) => {
+                              const base64String = uploadEvent.target?.result as string
+                              if (base64String) {
+                                setUrlImagenEventoInput(base64String)
+                              }
+                            }
+                            reader.readAsDataURL(file)
+                          }
+                        }}
+                        style={{ fontSize: '11.5px', color: '#6e6462' }}
+                      />
+                    </div>
+                  </div>
                 </div>
               </>
             ) : (
               <>
-                <div>
-                  <label style={{ fontSize: '12px', fontWeight: 700, color: '#400d0f', display: 'block', marginBottom: '4px' }}>Categoría de Gastronomía</label>
-                  <select name="tipoGastro" defaultValue={itemEditando?.categoriaGastro || 'Platillo'} style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1px solid #dcd6d3', fontSize: '13px', outline: 'none', backgroundColor: '#fff', cursor: 'pointer' }}>
-                    <option value="Platillo">Platillo</option>
-                    <option value="Bebida">Bebida</option>
-                  </select>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div>
+                    <label style={{ fontSize: '12px', fontWeight: 700, color: '#400d0f', display: 'block', marginBottom: '4px' }}>Categoría de Gastronomía</label>
+                    <select name="tipoGastro" defaultValue={itemEditando?.categoriaGastro || 'Platillo'} style={{ width: '100%', padding: '11px 14px', borderRadius: '12px', border: '1px solid #dcd6d3', fontSize: '13.5px', outline: 'none', backgroundColor: '#fff', cursor: 'pointer' }}>
+                      <option value="Platillo">Platillo</option>
+                      <option value="Bebida">Bebida</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '12px', fontWeight: 700, color: '#400d0f', display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '4px' }}>
+                      <Calendar size={14} color="#B3282D" /> Disponibilidad
+                    </label>
+                    <select 
+                      value={tipoDisponibilidad} 
+                      onChange={(e) => setTipoDisponibilidad(e.target.value)}
+                      style={{ width: '100%', padding: '11px 14px', borderRadius: '12px', border: '1px solid #dcd6d3', fontSize: '13.5px', outline: 'none', backgroundColor: '#fff', cursor: 'pointer' }}
+                    >
+                      <option value="Todo el año">Todo el año</option>
+                      <option value="Temporada Especial">Temporada Especial</option>
+                    </select>
+                  </div>
                 </div>
+
+                {tipoDisponibilidad === 'Temporada Especial' && (
+                  <div>
+                    <label style={{ fontSize: '12px', fontWeight: 700, color: '#B3282D', display: 'block', marginBottom: '4px' }}>Selecciona el periodo o temporada:</label>
+                    <select 
+                      value={temporadaSeleccionada}
+                      onChange={(e) => setTemporadaSeleccionada(e.target.value)}
+                      style={{ width: '100%', padding: '11px 14px', borderRadius: '12px', border: '1px solid #d5c2c2', fontSize: '13.5px', outline: 'none', backgroundColor: '#fdf5f5', cursor: 'pointer' }}
+                    >
+                      <option value="Enero - Febrero">Enero - Febrero</option>
+                      <option value="Marzo - Abril">Marzo - Abril</option>
+                      <option value="Mayo - Junio">Mayo - Junio</option>
+                      <option value="Julio - Agosto">Julio - Agosto</option>
+                      <option value="Septiembre - Octubre">Septiembre - Octubre</option>
+                      <option value="Noviembre - Diciembre">Noviembre - Diciembre</option>
+                    </select>
+                  </div>
+                )}
 
                 <div>
                   <label style={{ fontSize: '12px', fontWeight: 700, color: '#400d0f', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
-                    <ImageIcon size={15} color="#B3282D" /> Imagen del Platillo / Bebida
+                    <ImageIcon size={15} color="#B3282D" /> Imagen del Platillo / Bebida (.jpg o .png)
                   </label>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     <input 
-                      name="url_imagen" 
-                      placeholder="Pega aquí la URL de la imagen de Google..." 
-                      style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1px solid #dcd6d3', fontSize: '13px', outline: 'none' }} 
+                      value={urlImagenInput}
+                      onChange={(e) => setUrlImagenInput(e.target.value)}
+                      placeholder="Pega aquí la URL o sube una imagen..." 
+                      style={{ width: '100%', padding: '11px 14px', borderRadius: '12px', border: '1px solid #dcd6d3', fontSize: '13.5px', outline: 'none', backgroundColor: '#faf9f8' }} 
                     />
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ fontSize: '11px', color: '#6e6462', fontWeight: 600 }}>O sube desde tu dispositivo:</span>
+                      <span style={{ fontSize: '11.5px', color: '#6e6462', fontWeight: 600 }}>O sube imagen desde tu dispositivo:</span>
                       <input 
                         type="file" 
-                        accept="image/*"
+                        accept="image/jpeg, image/png, image/jpg"
                         onChange={(e) => {
                           const file = e.target.files?.[0]
                           if (file) {
-                            const localUrl = URL.createObjectURL(file)
-                            const inputUrl = e.currentTarget.form?.elements.namedItem('url_imagen') as HTMLInputElement
-                            if (inputUrl) inputUrl.value = localUrl
+                            if (!file.type.includes('jpeg') && !file.type.includes('png') && !file.type.includes('jpg')) {
+                              alert('Por favor selecciona únicamente un archivo formato JPG o PNG.')
+                              e.target.value = ''
+                              return
+                            }
+                            const reader = new FileReader()
+                            reader.onload = (uploadEvent) => {
+                              const base64String = uploadEvent.target?.result as string
+                              if (base64String) {
+                                setUrlImagenInput(base64String)
+                              }
+                            }
+                            reader.readAsDataURL(file)
                           }
                         }}
-                        style={{ fontSize: '11px', color: '#6e6462' }}
+                        style={{ fontSize: '11.5px', color: '#6e6462' }}
                       />
                     </div>
                   </div>
@@ -641,21 +821,50 @@ export default function AdminPanel({ volver }: AdminPanelProps) {
 
                 <div>
                   <label style={{ fontSize: '12px', fontWeight: 700, color: '#400d0f', display: 'block', marginBottom: '4px' }}>Preparación</label>
-                  <textarea name="preparacion" defaultValue={itemEditando?.preparacion || ''} rows={2} placeholder="Pasos de preparación" style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1px solid #dcd6d3', fontSize: '13px', outline: 'none', resize: 'vertical' }} />
+                  <textarea name="preparacion" defaultValue={itemEditando?.preparacion || ''} rows={2} placeholder="Pasos de preparación" style={{ width: '100%', padding: '11px 14px', borderRadius: '12px', border: '1px solid #dcd6d3', fontSize: '13.5px', outline: 'none', resize: 'vertical' }} />
                 </div>
 
                 <div>
                   <label style={{ fontSize: '12px', fontWeight: 700, color: '#400d0f', display: 'block', marginBottom: '4px' }}>Ingredientes (separados por coma)</label>
-                  <input name="ingredientes" defaultValue={Array.isArray(itemEditando?.ingredientes) ? itemEditando.ingredientes.join(', ') : (itemEditando?.ingredientes || '')} placeholder="Ingrediente 1, Ingrediente 2..." style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1px solid #dcd6d3', fontSize: '13px', outline: 'none' }} />
+                  <input name="ingredientes" defaultValue={Array.isArray(itemEditando?.ingredientes) ? itemEditando.ingredientes.join(', ') : (itemEditando?.ingredientes || '')} placeholder="Ingrediente 1, Ingrediente 2..." style={{ width: '100%', padding: '11px 14px', borderRadius: '12px', border: '1px solid #dcd6d3', fontSize: '13.5px', outline: 'none' }} />
+                </div>
+
+                {/* SELECTOR EXCLUSIVO DE LUGARES DONDE COMER */}
+                <div style={{ backgroundColor: '#faf5f4', padding: '14px', borderRadius: '14px', border: '1px solid #f2ece9' }}>
+                  <label style={{ fontSize: '13px', fontWeight: 800, color: '#400d0f', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+                    <MapPin size={16} color="#B3282D" /> ¿Dónde encontrarlo? (Solo lugares para comer)
+                  </label>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '140px', overflowY: 'auto', paddingRight: '4px' }}>
+                    {lugaresParaComer.map((lugar) => {
+                      const seleccionado = lugaresSeleccionados.includes(lugar.id_lugar)
+                      return (
+                        <label key={lugar.id_lugar} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#2d1515', cursor: 'pointer', backgroundColor: '#fff', padding: '8px 12px', borderRadius: '10px', border: '1px solid #f0e2e2' }}>
+                          <input 
+                            type="checkbox" 
+                            checked={seleccionado}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setLugaresSeleccionados(prev => [...prev, lugar.id_lugar])
+                              } else {
+                                setLugaresSeleccionados(prev => prev.filter(id => id !== lugar.id_lugar))
+                              }
+                            }}
+                            style={{ accentColor: '#B3282D', width: '16px', height: '16px', cursor: 'pointer' }}
+                          />
+                          <span style={{ fontWeight: 600 }}>{lugar.nombre}</span>
+                        </label>
+                      )
+                    })}
+                  </div>
                 </div>
               </>
             )}
 
             <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
-              <button type="submit" style={{ backgroundColor: '#B3282D', color: '#fff', border: 'none', padding: '12px 18px', borderRadius: '12px', fontWeight: 700, fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', flex: 1, boxShadow: '0 4px 12px rgba(179,40,45,0.2)' }}>
+              <button type="submit" style={{ backgroundColor: '#B3282D', color: '#fff', border: 'none', padding: '13px 18px', borderRadius: '12px', fontWeight: 700, fontSize: '13.5px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', flex: 1, boxShadow: '0 4px 12px rgba(179,40,45,0.2)' }}>
                 <Check size={18} /> Guardar registro
               </button>
-              <button type="button" onClick={cerrarModalForm} style={{ backgroundColor: '#f2ece9', color: '#400d0f', border: 'none', padding: '12px 18px', borderRadius: '12px', fontWeight: 700, fontSize: '13px', cursor: 'pointer', flex: 1 }}>
+              <button type="button" onClick={cerrarModalForm} style={{ backgroundColor: '#f2ece9', color: '#400d0f', border: 'none', padding: '13px 18px', borderRadius: '12px', fontWeight: 700, fontSize: '13.5px', cursor: 'pointer', flex: 1 }}>
                 Cancelar
               </button>
             </div>
@@ -670,7 +879,7 @@ export default function AdminPanel({ volver }: AdminPanelProps) {
         ) : (
           listaActual.map((item, idx) => {
             const idKey = seccion === 'lugares' ? item.id_lugar : seccion === 'eventos' ? item.id_evento : `${item.categoriaGastro}-${item.id_real || idx}`
-            const detalleExtra = seccion === 'lugares' ? item.direccion : seccion === 'eventos' ? item.lugar : `${item.categoriaGastro} tradicional`
+            const detalleExtra = seccion === 'lugares' ? item.direccion : seccion === 'eventos' ? item.lugar : `${item.categoriaGastro} (${item.temporada || 'Todo el año'})`
 
             return (
               <div key={idKey} style={{ backgroundColor: '#fff', padding: '14px 18px', borderRadius: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid #f2ece9', boxShadow: '0 2px 8px rgba(0,0,0,0.02)', transition: 'all 0.2s' }}>

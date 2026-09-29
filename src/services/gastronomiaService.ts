@@ -14,6 +14,7 @@ export async function obtenerPlatillos() {
       precio,
       estado,
       id_categoria,
+      temporada,
       categorias_platillo (
         id_categoria,
         nombre,
@@ -48,6 +49,7 @@ export async function obtenerBebidas() {
       tipo_bebida,
       precio,
       estado,
+      temporada,
       imagenes_bebida (
         url,
         es_principal,

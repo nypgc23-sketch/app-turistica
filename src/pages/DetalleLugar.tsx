@@ -117,6 +117,8 @@ export default function DetalleLugar({
   const [resultadoRuta, setResultadoRuta] =
     useState<string | null>(null)
 
+  const [diasSeleccionados, setDiasSeleccionados] = useState<number>(1)
+
 
   // Cargar información del lugar
 
@@ -247,12 +249,11 @@ export default function DetalleLugar({
         error: error?.message || 'no-error'
       })
 
-      // Validación más robusta
       if (error || !session || !session.user) {
         setMensajeFavorito('Para guardar este lugar necesitas iniciar sesión o crear una cuenta.')
         console.warn('❌ Sin sesión válida, cancelando operación de favoritos')
         setGuardandoFavorito(false)
-        return // <--- ESTE RETURN ES CRÍTICO
+        return
       }
 
       if (!detalle) {
@@ -263,7 +264,6 @@ export default function DetalleLugar({
 
       console.log('✅ Sesión válida para favoritos:', session.user.id)
 
-      // Si ya es favorito, eliminar
       if (esLugarFavorito) {
         const resultado = await eliminarFavorito(session.user.id, detalle.id_lugar)
 
@@ -280,7 +280,6 @@ export default function DetalleLugar({
         return
       }
 
-      // Si no es favorito, agregar
       const resultado = await agregarFavorito(session.user.id, detalle.id_lugar)
 
       if (resultado.error) {
@@ -302,11 +301,12 @@ export default function DetalleLugar({
   }
 
 
-  // Agregar lugar a una ruta
+  // Agregar lugar a una ruta usando el menú desplegable
 
-  async function manejarRuta(duracionDias: number) {
+  async function manejarRuta() {
     setResultadoRuta(null)
     setGuardandoRuta(true)
+    const duracionDias = Number(diasSeleccionados)
 
     try {
       const { data: { session }, error } = await supabase.auth.getSession()
@@ -317,12 +317,11 @@ export default function DetalleLugar({
         error: error?.message || 'no-error'
       })
 
-      // Validación más robusta
       if (error || !session || !session.user) {
         setResultadoRuta('Para crear una ruta necesitas iniciar sesión o crear una cuenta.')
         console.warn('❌ Sin sesión válida, cancelando operación de ruta')
         setGuardandoRuta(false)
-        return // <--- ESTE RETURN ES CRÍTICO
+        return
       }
 
       if (!detalle) {
@@ -335,7 +334,6 @@ export default function DetalleLugar({
 
       const usuarioId = session.user.id
 
-      // Buscar ruta existente
       let resultadoRuta = await obtenerRutaUsuario(usuarioId, duracionDias)
 
       if (resultadoRuta.error) {
@@ -345,7 +343,6 @@ export default function DetalleLugar({
         return
       }
 
-      // Crear ruta si no existe
       if (!resultadoRuta.data) {
         resultadoRuta = await crearRuta(usuarioId, duracionDias)
 
@@ -363,7 +360,6 @@ export default function DetalleLugar({
         return
       }
 
-      // Agregar lugar a la ruta
       const resultadoLugar = await agregarLugarARuta(
         resultadoRuta.data.id_ruta,
         detalle.id_lugar
@@ -379,7 +375,7 @@ export default function DetalleLugar({
       setResultadoRuta(
         duracionDias === 1
           ? 'Lugar añadido a tu ruta de 1 día.'
-          : 'Lugar añadido a tu ruta de 2 días.'
+          : `Lugar añadido a tu ruta de ${duracionDias} días.`
       )
       setGuardandoRuta(false)
 
@@ -683,64 +679,58 @@ export default function DetalleLugar({
                 </span>
 
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                {/* MENÚ DESPLEGABLE DE DÍAS Y BOTÓN ÚNICO "Añadir a ruta" */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <label style={{ fontSize: '12px', color: '#6e6462', fontWeight: 600 }}>
+                      ¿Cuántos días dura tu visita?
+                    </label>
+                    <select
+                      value={diasSeleccionados}
+                      onChange={(e) => setDiasSeleccionados(Number(e.target.value))}
+                      style={{
+                        padding: '10px 12px',
+                        borderRadius: '10px',
+                        border: '1px solid #f2ece9',
+                        backgroundColor: '#fcf8f7',
+                        color: '#400d0f',
+                        fontSize: '14px',
+                        fontWeight: 600,
+                        outline: 'none',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <option value={1}>Ruta de 1 día</option>
+                      <option value={2}>Ruta de 2 días</option>
+                    </select>
+                  </div>
 
                   <button
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '6px',
-                      padding: '10px',
-                      borderRadius: '10px',
-                      border: '1px solid #B3282D',
-                      backgroundColor: '#fff',
-                      color: '#B3282D',
-                      fontWeight: 700,
-                      cursor: 'pointer'
-                    }}
-                    onClick={() =>
-                      manejarRuta(1)
-                    }
-                    disabled={guardandoRuta}
-                  >
-
-                    <Route size={16} />
-
-                    {guardandoRuta
-                      ? 'Guardando...'
-                      : 'Ruta de 1 día'}
-
-                  </button>
-
-
-                  <button
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '6px',
-                      padding: '10px',
-                      borderRadius: '10px',
-                      border: '1px solid #B3282D',
-                      backgroundColor: '#fff',
-                      color: '#B3282D',
-                      fontWeight: 700,
-                      cursor: 'pointer'
-                    }}
-                    onClick={() =>
-                      manejarRuta(2)
-                    }
-                    disabled={guardandoRuta}
-                  >
-
-                    <Route size={16} />
-
-                    {guardandoRuta
-                      ? 'Guardando...'
-                      : 'Ruta de 2 días'}
-
-                  </button>
+  type="button"
+  className="primary-button"
+  style={{
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '8px',
+    padding: '14px',
+    borderRadius: '12px',
+    border: 'none',
+    backgroundColor: '#B3282D',
+    color: '#fff',
+    fontWeight: 700,
+    fontSize: '15px',
+    cursor: 'pointer',
+    width: '100%',
+    boxShadow: '0 4px 12px rgba(179, 40, 45, 0.25)'
+  }}
+  onClick={manejarRuta}
+  disabled={guardandoRuta}
+>
+  <Route size={18} />
+  {guardandoRuta ? 'Guardando...' : 'Añadir a ruta'}
+</button>
 
                 </div>
 

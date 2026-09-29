@@ -61,8 +61,8 @@ function crearIconoNumerado(numero: number) {
 
 export default function MapaUnificado({
   puntos,
-  centro = [19.059, -98.306],
-  zoom = 14,
+  centro,
+  zoom = 15,
   mostrarRuta = false,
   altura = '400px',
   titulo,
@@ -73,7 +73,7 @@ export default function MapaUnificado({
 
   // Filtrar puntos que contienen coordenadas válidas
   const puntosValidos = puntos.filter(
-    p => p.latitud !== null && p.longitud !== null
+    p => p.latitud !== null && p.longitud !== null && !isNaN(p.latitud) && !isNaN(p.longitud)
   )
 
   if (puntosValidos.length === 0) {
@@ -85,16 +85,21 @@ export default function MapaUnificado({
     )
   }
 
-  // Desplazamiento inteligente por si hay coordenadas encimadas (como el Mercado de Cholula)
+  // Desplazamiento inteligente y seguro para evitar que pines con coordenadas idénticas se encimen
   const puntosAjustados = puntosValidos.map((p, idx, arr) => {
-    let lat = p.latitud!
-    let lon = p.longitud!
+    let lat = Number(p.latitud!)
+    let lon = Number(p.longitud!)
 
-    // Si hay puntos con exactamente la misma lat/lon, aplicar un leve desfase visual automático
-    const duplicadosPrevios = arr.slice(0, idx).filter(prev => prev.latitud === lat && prev.longitud === lon).length
+    // Contar cuántos puntos anteriores tienen exactamente la misma posición
+    const duplicadosPrevios = arr.slice(0, idx).filter(
+      prev => Number(prev.latitud) === lat && Number(prev.longitud) === lon
+    ).length
+
     if (duplicadosPrevios > 0) {
-      lat += duplicadosPrevios * 0.0015
-      lon += duplicadosPrevios * 0.0015
+      // Aplicamos un pequeño desfase en abanico/espiral para que cada pin sea perfectamente visible
+      const angulo = duplicadosPrevios * (Math.PI / 2)
+      lat += Math.sin(angulo) * 0.00035 * duplicadosPrevios
+      lon += Math.cos(angulo) * 0.00035 * duplicadosPrevios
     }
 
     return {
@@ -172,7 +177,7 @@ export default function MapaUnificado({
             const numeroOrden = punto.orden_visita || index + 1
             return (
               <Marker
-                key={punto.id || index}
+                key={`marker-${punto.id}-${index}`}
                 position={[punto.latitudAjustada, punto.longitudAjustada]}
                 icon={crearIconoNumerado(numeroOrden)}
               >

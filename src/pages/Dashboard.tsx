@@ -10,6 +10,7 @@ type DashboardProps = {
   lugares: () => void
   gastronomia: () => void
   eventos: () => void
+  misEventos: () => void
   historia: () => void
   favoritos: () => void
   misRutas: () => void
@@ -29,6 +30,7 @@ export default function Dashboard({
   lugares,
   gastronomia,
   eventos,
+  misEventos,
   historia,
   favoritos,
   misRutas,
@@ -284,7 +286,7 @@ export default function Dashboard({
               <button onClick={() => { perfil(); setMenuAbierto(false); }}><Heart size={20} /> Perfil</button>
               <button onClick={() => { mapa(); setMenuAbierto(false); }}><MapPin size={20} /> Mapa</button>
               <button onClick={() => { misRutas(); setMenuAbierto(false); }}><Route size={20} /> Mis rutas</button>
-              <button onClick={() => { eventos(); setMenuAbierto(false); }}><CalendarDays size={20} /> Mis eventos</button>
+              <button onClick={() => { misEventos(); setMenuAbierto(false); }}><CalendarDays size={20} /> Mis eventos</button>
               <button onClick={() => { favoritos(); setMenuAbierto(false); }}><Heart size={20} /> Favoritos</button>
               <button onClick={() => { historia(); setMenuAbierto(false); }}><BookOpen size={20} /> Historia</button>
             </div>

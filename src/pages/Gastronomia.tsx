@@ -22,7 +22,7 @@ type Platillo = {
   precio: number | null
   estado: boolean | null
   id_categoria: number | null
-  temporada?: string | null // <-- Campo agregado
+  temporada?: string | null
   categorias_platillo?: {
     id_categoria: number
     nombre: string
@@ -44,7 +44,7 @@ type Bebida = {
   tipo_bebida: string | null
   precio: number | null
   estado: boolean | null
-  temporada?: string | null // <-- Campo agregado
+  temporada?: string | null
   imagenes_bebida?: {
     url: string
     es_principal: boolean
@@ -91,7 +91,7 @@ export default function Gastronomia({
 }: GastronomiaProps) {
   // Estados de navegación
   const [categoria, setCategoria] = useState<Categoria>('inicio')
-  const [temporadaFiltro, setTemporadaFiltro] = useState<string>('Todo el año') // <-- Filtro de temporada
+  const [temporadaFiltro, setTemporadaFiltro] = useState<string>('Todo el año')
 
   // Estados de datos
   const [platillos, setPlatillos] = useState<Platillo[]>([])
@@ -128,10 +128,16 @@ export default function Gastronomia({
 
     if (itemInicial.tipo === 'platillo' && platillos.length > 0) {
       const p = platillos.find((item) => item.id_platillo === itemInicial.id)
-      if (p) seleccionarPlatillo(p)
+      if (p) {
+        setCategoria('platillos')
+        seleccionarPlatillo(p)
+      }
     } else if (itemInicial.tipo === 'bebida' && bebidas.length > 0) {
       const b = bebidas.find((item) => item.id_bebida === itemInicial.id)
-      if (b) seleccionarBebida(b)
+      if (b) {
+        setCategoria('bebidas')
+        seleccionarBebida(b)
+      }
     }
   }, [itemInicial, platillos, bebidas])
 
@@ -332,29 +338,44 @@ export default function Gastronomia({
   }
 
   function obtenerImagenPrincipal(item: Platillo | Bebida): string {
+    let urlValida = ''
+
     if ('imagenes_platillo' in item && item.imagenes_platillo && item.imagenes_platillo.length > 0) {
-      const principal = item.imagenes_platillo.find((img) => img.es_principal)
-      return principal ? principal.url : item.imagenes_platillo[0].url
+      const principal = item.imagenes_platillo.find((img) => img.es_principal && img.url && !img.url.startsWith('blob:'))
+      const cualqueira = item.imagenes_platillo.find((img) => img.url && !img.url.startsWith('blob:'))
+      urlValida = principal ? principal.url : (cualqueira ? cualqueira.url : '')
+    } else if ('imagenes_bebida' in item && item.imagenes_bebida && item.imagenes_bebida.length > 0) {
+      const principal = item.imagenes_bebida.find((img) => img.es_principal && img.url && !img.url.startsWith('blob:'))
+      const cualqueira = item.imagenes_bebida.find((img) => img.url && !img.url.startsWith('blob:'))
+      urlValida = principal ? principal.url : (cualqueira ? cualqueira.url : '')
     }
-    if ('imagenes_bebida' in item && item.imagenes_bebida && item.imagenes_bebida.length > 0) {
-      const principal = item.imagenes_bebida.find((img) => img.es_principal)
-      return principal ? principal.url : item.imagenes_bebida[0].url
+
+    if (!urlValida || urlValida.startsWith('blob:')) {
+      return 'imagenes_platillo' in item
+        ? '/imagenes/gastronomia/platillo.jpg'
+        : '/imagenes/gastronomia/bebida.jpg'
     }
-    return 'imagenes_platillo' in item
-      ? '/imagenes/gastronomia/platillo.jpg'
-      : '/imagenes/gastronomia/bebida.jpg'
+
+    return urlValida
   }
 
   function obtenerImagenLugar(lugar: Lugar): string {
+    let urlValida = ''
     if (lugar.imagenes_lugar && lugar.imagenes_lugar.length > 0) {
-      const principal = lugar.imagenes_lugar.find((img) => img.es_principal)
-      return principal ? principal.url : lugar.imagenes_lugar[0].url
+      const principal = lugar.imagenes_lugar.find((img) => img.es_principal && img.url && !img.url.startsWith('blob:'))
+      const cualqueira = lugar.imagenes_lugar.find((img) => img.url && !img.url.startsWith('blob:'))
+      urlValida = principal ? principal.url : (cualqueira ? cualqueira.url : '')
     }
-    const nombreLower = lugar.nombre.toLowerCase()
-    if (nombreLower.includes('mercado') || lugar.categoria_id === 8) {
-      return '/imagenes/mercado.jpg'
+
+    if (!urlValida || urlValida.startsWith('blob:')) {
+      const nombreLower = lugar.nombre.toLowerCase()
+      if (nombreLower.includes('mercado') || lugar.categoria_id === 8) {
+        return '/imagenes/mercado.jpg'
+      }
+      return '/imagenes/lugares/restaurante.jpg'
     }
-    return '/imagenes/lugares/restaurante.jpg'
+
+    return urlValida
   }
 
   function verLugar(idLugar: number) {
@@ -410,7 +431,6 @@ export default function Gastronomia({
     )
   }
 
-  // Componente de botones de filtro de temporada
   function renderFiltrosTemporada() {
     return (
       <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
@@ -450,23 +470,22 @@ export default function Gastronomia({
     )
   }
 
-  // Listado de platillos con filtro de temporada
-  function renderPlatillos() {
+function renderPlatillos() {
     const platillosFiltrados = platillos.filter((item) => {
-      const temp = item.temporada || 'Todo el año'
+      const temp = (item.temporada || '').toLowerCase().trim()
+      const esTodoElAnio = temp === '' || temp.includes('todo') || temp.includes('año')
+
       if (temporadaFiltro === 'Todo el año') {
-        return temp.toLowerCase().includes('todo el año')
+        return esTodoElAnio
       } else {
-        return !temp.toLowerCase().includes('todo el año')
+        return !esTodoElAnio // Esto muestra los platillos con temporada específica (ej. Chiles en Nogada)
       }
     })
 
     return (
       <>
         <div className="gastronomia-seccion-header">
-          <button type="button" className="link-button" onClick={() => setCategoria('inicio')}>
-            Volver a gastronomía
-          </button>
+          <button type="button" className="link-button" onClick={() => setCategoria('inicio')}>Volver a gastronomía</button>
           <h2>Platillos típicos</h2>
           <p>Selecciona un platillo para consultar su información.</p>
         </div>
@@ -483,24 +502,13 @@ export default function Gastronomia({
         ) : (
           <div className="gastronomia-lista">
             {platillosFiltrados.map((platillo) => (
-              <button
-                type="button"
-                className="gastronomia-item"
-                key={platillo.id_platillo}
-                onClick={() => seleccionarPlatillo(platillo)}
-              >
-                <img
-                  src={obtenerImagenPrincipal(platillo)}
-                  alt={platillo.nombre}
-                  className="gastronomia-item-imagen"
-                />
+              <button type="button" className="gastronomia-item" key={platillo.id_platillo} onClick={() => seleccionarPlatillo(platillo)}>
+                <img src={obtenerImagenPrincipal(platillo)} alt={platillo.nombre} className="gastronomia-item-imagen" />
                 <div className="gastronomia-item-contenido">
                   <h3>{platillo.nombre}</h3>
                   <p>{platillo.descripcion || 'Platillo tradicional de la región de Cholula.'}</p>
                   <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
-                    {platillo.tipo_comida && (
-                      <span className="gastronomia-tipo">{platillo.tipo_comida}</span>
-                    )}
+                    {platillo.tipo_comida && <span className="gastronomia-tipo">{platillo.tipo_comida}</span>}
                     <span className="gastronomia-tipo" style={{ backgroundColor: '#f2ece9', color: '#400d0f' }}>
                       {platillo.temporada || 'Todo el año'}
                     </span>
@@ -514,23 +522,22 @@ export default function Gastronomia({
     )
   }
 
-  // Listado de bebidas con filtro de temporada
   function renderBebidas() {
     const bebidasFiltradas = bebidas.filter((item) => {
-      const temp = item.temporada || 'Todo el año'
+      const temp = (item.temporada || '').toLowerCase().trim()
+      const esTodoElAnio = temp === '' || temp.includes('todo') || temp.includes('año')
+
       if (temporadaFiltro === 'Todo el año') {
-        return temp.toLowerCase().includes('todo el año')
+        return esTodoElAnio
       } else {
-        return !temp.toLowerCase().includes('todo el año')
+        return !esTodoElAnio
       }
     })
 
     return (
       <>
         <div className="gastronomia-seccion-header">
-          <button type="button" className="link-button" onClick={() => setCategoria('inicio')}>
-            Volver a gastronomía
-          </button>
+          <button type="button" className="link-button" onClick={() => setCategoria('inicio')}>Volver a gastronomía</button>
           <h2>Bebidas tradicionales</h2>
           <p>Selecciona una bebida para consultar su información.</p>
         </div>
@@ -545,24 +552,13 @@ export default function Gastronomia({
         ) : (
           <div className="gastronomia-lista">
             {bebidasFiltradas.map((bebida) => (
-              <button
-                type="button"
-                className="gastronomia-item"
-                key={bebida.id_bebida}
-                onClick={() => seleccionarBebida(bebida)}
-              >
-                <img
-                  src={obtenerImagenPrincipal(bebida)}
-                  alt={bebida.nombre}
-                  className="gastronomia-item-imagen"
-                />
+              <button type="button" className="gastronomia-item" key={bebida.id_bebida} onClick={() => seleccionarBebida(bebida)}>
+                <img src={obtenerImagenPrincipal(bebida)} alt={bebida.nombre} className="gastronomia-item-imagen" />
                 <div className="gastronomia-item-contenido">
                   <h3>{bebida.nombre}</h3>
                   <p>{bebida.descripcion || 'Bebida tradicional de la región.'}</p>
                   <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
-                    {bebida.tipo_bebida && (
-                      <span className="gastronomia-tipo">{bebida.tipo_bebida}</span>
-                    )}
+                    {bebida.tipo_bebida && <span className="gastronomia-tipo">{bebida.tipo_bebida}</span>}
                     <span className="gastronomia-tipo" style={{ backgroundColor: '#f2ece9', color: '#400d0f' }}>
                       {bebida.temporada || 'Todo el año'}
                     </span>
@@ -575,7 +571,6 @@ export default function Gastronomia({
       </>
     )
   }
-
   function renderLugaresAsociados(esPlatillo: boolean) {
     const ID_RESTAURANTE = 7
     const ID_MERCADO = 8
@@ -688,7 +683,7 @@ export default function Gastronomia({
     return (
       <div className="gastronomia-ficha">
         <button type="button" className="link-button" onClick={volverDeFicha}>
-          Volver
+          Volver a la lista
         </button>
 
         <div className="gastronomia-ficha-card">
@@ -791,15 +786,14 @@ export default function Gastronomia({
           className="link-button" 
           onClick={() => {
             if (contenidoSeleccionado) {
-              if (itemInicial) {
-                volver();
-              } else {
-                volverDeFicha();
-              }
+              // Si estamos viendo una ficha detallada, cerramos la ficha y volvemos a la lista o inicio
+              volverDeFicha()
             } else if (categoria !== 'inicio') {
-              setCategoria('inicio');
+              // Si estamos en la lista de platillos/bebidas, volvemos a la selección principal
+              setCategoria('inicio')
             } else {
-              volver();
+              // Si estamos en el inicio de gastronomía, salimos al menú principal usando la prop volver
+              volver()
             }
           }}
         >

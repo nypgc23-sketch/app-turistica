@@ -22,8 +22,11 @@ export default function MapaRuta({ lugares }: MapaRutaProps) {
     orden_visita: l.orden_visita
   }))
 
+  const claveMapa = puntosRuta.map(p => `${p.id}-${p.orden_visita}`).join('_')
+
   return (
     <MapaUnificado
+      key={claveMapa}
       puntos={puntosRuta}
       mostrarRuta={true}
       altura="400px"

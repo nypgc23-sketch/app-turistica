@@ -10,9 +10,10 @@ type PerfilProps = {
   onVerEventos?: () => void
   onCerrarSesion?: () => void
   irAdmin?: () => void
+  cambiarPantalla?: (pantalla: string) => void // <-- Añadido para control directo
 }
 
-export default function Perfil({ volver, onVerEventos, onCerrarSesion, irAdmin }: PerfilProps) {
+export default function Perfil({ volver, onVerEventos, onCerrarSesion, irAdmin, cambiarPantalla }: PerfilProps) {
   const [usuario, setUsuario] = useState<any>(null)
   const [nombreBD, setNombreBD] = useState('Usuario')
   const [modoOscuro, setModoOscuro] = useState(false)
@@ -252,14 +253,20 @@ export default function Perfil({ volver, onVerEventos, onCerrarSesion, irAdmin }
 
           <hr className="divider" />
 
+          {/* SECCIÓN MIS EVENTOS - FORZADA A ABRIR MIS EVENTOS */}
           <div className="perfil-eventos">
             <div className="eventos-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><Calendar size={18} color="#7B1E34" /> Mis Eventos</h3>
-              {onVerEventos && (
-                <button className="btn-toggle-eventos" onClick={onVerEventos} style={{ background: 'none', border: 'none', color: '#7B1E34', cursor: 'pointer', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  Ver agenda <ChevronRight size={14} />
-                </button>
-              )}
+              <button 
+                className="btn-toggle-eventos" 
+                onClick={() => {
+                  if (onVerEventos) onVerEventos()
+                  if (cambiarPantalla) cambiarPantalla('misEventos')
+                }} 
+                style={{ background: 'none', border: 'none', color: '#7B1E34', cursor: 'pointer', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}
+              >
+                Ver agenda <ChevronRight size={14} />
+              </button>
             </div>
             <p className="sin-eventos">Consulta y gestiona tus eventos agendados en Cholula.</p>
           </div>
@@ -360,7 +367,6 @@ export default function Perfil({ volver, onVerEventos, onCerrarSesion, irAdmin }
             </div>
           </div>
 
-          {/* BOTÓN EXCLUSIVO DEL ADMINISTRADOR */}
           {esAdmin && irAdmin && (
             <button 
               onClick={irAdmin} 
