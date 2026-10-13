@@ -11,6 +11,10 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
     storage: window.localStorage,
   },
   global: {
-    headers: { 'x-client-info': 'san-andres-cholula-web' },
+    //headers: { 'x-client-info': 'san-andres-cholula-web' },},
+    headers: { 'x-client-info': 'san-andres-app' },
+  },
+  db: {
+    schema: 'public',
   },
 })

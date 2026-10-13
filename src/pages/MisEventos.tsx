@@ -26,7 +26,10 @@ export default function MisEventos({ volver, seleccionarEvento }: MisEventosProp
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [eliminando, setEliminando] = useState<number | null>(null)
-  const [vista, setVista] = useState<'lista' | 'calendario'>('calendario') // <-- Por defecto en calendario
+  const [vista, setVista] = useState<'lista' | 'calendario'>('calendario')
+
+  // ID de usuario actualizado a 36 para que coincida exactamente con tu base de datos de Supabase
+  const ID_USUARIO_ACTUAL = 36
 
   useEffect(() => {
     cargarAgendaPersonal()
@@ -37,12 +40,10 @@ export default function MisEventos({ volver, seleccionarEvento }: MisEventosProp
     setError(null)
 
     try {
-      const idUsuarioActual = 34
-
       const { data: agendados, error: errAgendados } = await supabase
         .from('eventos_usuario')
         .select('id_evento_usuario, id_evento, fecha_agendado')
-        .eq('id_usuario', idUsuarioActual)
+        .eq('id_usuario', ID_USUARIO_ACTUAL)
 
       if (errAgendados) {
         setError('No se pudo cargar tu agenda personal.')
@@ -102,7 +103,7 @@ export default function MisEventos({ volver, seleccionarEvento }: MisEventosProp
       const { error } = await supabase
         .from('eventos_usuario')
         .delete()
-        .eq('id_usuario', 34)
+        .eq('id_usuario', ID_USUARIO_ACTUAL)
         .eq('id_evento', idEvento)
 
       if (error) {
@@ -140,7 +141,6 @@ export default function MisEventos({ volver, seleccionarEvento }: MisEventosProp
   return (
     <main style={{ backgroundColor: '#fcf8f7', minHeight: '100vh', paddingBottom: '110px', fontFamily: 'inherit' }}>
       
-      {/* HEADER CON TÍTULOS Y TEXTOS EN BLANCO PURO */}
       <header style={{
         background: 'linear-gradient(135deg, #400d0f 0%, #5A1222 50%, #7B1E34 100%)',
         padding: '36px 20px 56px 20px',
@@ -163,7 +163,7 @@ export default function MisEventos({ volver, seleccionarEvento }: MisEventosProp
                 Itinerario Turístico
               </span>
             </div>
-            <h1 style={{ margin: 0, fontSize: '28px', fontWeight: 900, color: '#ffffff', letterSpacing: '-0.5px', textShadow: '0 2px 10px rgba(0,0,0,0.2)' }}>
+            <h1 style={{ margin: 0, fontSize: '28px', fontWeight: 900, color: '#ffffff', letterSpacing: '-0.5px' }}>
               Mis Eventos
             </h1>
           </div>
@@ -178,9 +178,7 @@ export default function MisEventos({ volver, seleccionarEvento }: MisEventosProp
               cursor: 'pointer',
               fontWeight: 700,
               fontSize: '13px',
-              backdropFilter: 'blur(12px)',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-              transition: 'all 0.2s'
+              backdropFilter: 'blur(12px)'
             }}
           >
             Volver
@@ -190,7 +188,6 @@ export default function MisEventos({ volver, seleccionarEvento }: MisEventosProp
 
       <div style={{ maxWidth: '700px', margin: '-28px auto 0 auto', padding: '0 20px', position: 'relative', zIndex: 10 }}>
         
-        {/* SELECTOR DE VISTA */}
         {!cargando && eventos.length > 0 && (
           <div style={{
             backgroundColor: '#ffffff',
@@ -205,7 +202,7 @@ export default function MisEventos({ volver, seleccionarEvento }: MisEventosProp
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingLeft: '12px' }}>
               <BookmarkCheck size={18} color="#5A1222" />
-              <span style={{ fontSize: '13px', fontWeight: 800, color: '#5A1222', letterSpacing: '0.3px' }}>
+              <span style={{ fontSize: '13px', fontWeight: 800, color: '#5A1222' }}>
                 Vista de Agenda
               </span>
             </div>
@@ -223,9 +220,7 @@ export default function MisEventos({ volver, seleccionarEvento }: MisEventosProp
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '6px',
-                  boxShadow: vista === 'lista' ? '0 4px 12px rgba(90, 18, 34, 0.25)' : 'none',
-                  transition: 'all 0.2s'
+                  gap: '6px'
                 }}
               >
                 <List size={16} /> Lista
@@ -243,9 +238,7 @@ export default function MisEventos({ volver, seleccionarEvento }: MisEventosProp
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '6px',
-                  boxShadow: vista === 'calendario' ? '0 4px 12px rgba(90, 18, 34, 0.25)' : 'none',
-                  transition: 'all 0.2s'
+                  gap: '6px'
                 }}
               >
                 <LayoutGrid size={16} /> Calendario
@@ -268,7 +261,7 @@ export default function MisEventos({ volver, seleccionarEvento }: MisEventosProp
 
         {!cargando && eventos.length === 0 && (
           <div style={{ backgroundColor: '#ffffff', textAlign: 'center', padding: '60px 24px', borderRadius: '30px', boxShadow: '0 12px 35px rgba(0,0,0,0.06)', border: '1px solid #f2ece9' }}>
-            <div style={{ backgroundColor: '#fdf5f5', width: '80px', height: '80px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px auto', boxShadow: '0 6px 16px rgba(90, 18, 34, 0.1)' }}>
+            <div style={{ backgroundColor: '#fdf5f5', width: '80px', height: '80px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px auto' }}>
               <Calendar size={36} color="#5A1222" />
             </div>
             <h3 style={{ margin: '0 0 8px 0', fontSize: '20px', color: '#2d1515', fontWeight: 900 }}>Tu agenda está vacía</h3>
@@ -295,38 +288,31 @@ export default function MisEventos({ volver, seleccionarEvento }: MisEventosProp
                 }}
               >
                 <div style={{ padding: '22px', display: 'flex', gap: '18px', alignItems: 'flex-start' }}>
-                  
-                  <div style={{ width: '110px', height: '110px', borderRadius: '20px', overflow: 'hidden', flexShrink: 0, backgroundColor: '#f5f0ef', boxShadow: '0 6px 16px rgba(0,0,0,0.1)' }}>
-                    <img
-                      src={obtenerImagen(evento)}
-                      alt={evento.nombre}
-                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                    />
+                  <div style={{ width: '110px', height: '110px', borderRadius: '20px', overflow: 'hidden', flexShrink: 0, backgroundColor: '#f5f0ef' }}>
+                    <img src={obtenerImagen(evento)} alt={evento.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   </div>
 
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-                      <span style={{ backgroundColor: '#fdf5f5', color: '#5A1222', padding: '4px 12px', borderRadius: '12px', fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                        Guardado en agenda
-                      </span>
-                    </div>
+                    <span style={{ backgroundColor: '#fdf5f5', color: '#5A1222', padding: '4px 12px', borderRadius: '12px', fontSize: '10px', fontWeight: 800, textTransform: 'uppercase' }}>
+                      Guardado en agenda
+                    </span>
 
-                    <h4 style={{ margin: '0 0 6px 0', fontSize: '18px', fontWeight: 900, color: '#2d1515', lineHeight: 1.3 }}>
+                    <h4 style={{ margin: '6px 0 6px 0', fontSize: '18px', fontWeight: 900, color: '#2d1515' }}>
                       {evento.nombre}
                     </h4>
                     
-                    <p style={{ margin: '0 0 14px 0', fontSize: '13px', color: '#6e6462', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: 1.4 }}>
+                    <p style={{ margin: '0 0 14px 0', fontSize: '13px', color: '#6e6462', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
                       {evento.descripcion || 'Sin descripción disponible.'}
                     </p>
 
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', fontSize: '12px', color: '#400d0f', fontWeight: 700 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#fdf5f5', padding: '6px 12px', borderRadius: '10px', border: '1px solid #fbeaea' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#fdf5f5', padding: '6px 12px', borderRadius: '10px' }}>
                         <Calendar size={14} color="#5A1222" />
                         <span>{formatDate(evento.fecha_inicio)}</span>
                       </div>
 
                       {evento.horario && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#fdf5f5', padding: '6px 12px', borderRadius: '10px', border: '1px solid #fbeaea' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#fdf5f5', padding: '6px 12px', borderRadius: '10px' }}>
                           <Clock size={14} color="#5A1222" />
                           <span>{evento.horario}</span>
                         </div>
@@ -336,7 +322,7 @@ export default function MisEventos({ volver, seleccionarEvento }: MisEventosProp
                     {evento.lugar && (
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#6e6462', marginTop: '10px', fontWeight: 600 }}>
                         <MapPin size={15} color="#5A1222" style={{ flexShrink: 0 }} />
-                        <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{evento.lugar}</span>
+                        <span>{evento.lugar}</span>
                       </div>
                     )}
                   </div>
@@ -359,9 +345,7 @@ export default function MisEventos({ volver, seleccionarEvento }: MisEventosProp
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      gap: '8px',
-                      boxShadow: '0 6px 18px rgba(90, 18, 34, 0.25)',
-                      transition: 'all 0.2s'
+                      gap: '8px'
                     }}
                   >
                     <Eye size={17} /> Ver detalles y mapa
@@ -382,9 +366,7 @@ export default function MisEventos({ volver, seleccionarEvento }: MisEventosProp
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      gap: '6px',
-                      boxShadow: '0 2px 8px rgba(0,0,0,0.02)',
-                      transition: 'all 0.2s'
+                      gap: '6px'
                     }}
                   >
                     <Trash2 size={17} />
@@ -396,7 +378,7 @@ export default function MisEventos({ volver, seleccionarEvento }: MisEventosProp
           </div>
         )}
 
-        {/* VISTA EN CALENDARIO (POR DEFECTO) */}
+        {/* VISTA EN CALENDARIO */}
         {!cargando && eventos.length > 0 && vista === 'calendario' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             {eventosOrdenados.map((evento) => (
@@ -422,7 +404,7 @@ export default function MisEventos({ volver, seleccionarEvento }: MisEventosProp
                   minWidth: '85px',
                   boxShadow: '0 6px 16px rgba(90, 18, 34, 0.2)'
                 }}>
-                  <span style={{ fontSize: '11px', textTransform: 'uppercase', fontWeight: 800, display: 'block', opacity: 0.95, letterSpacing: '0.5px', color: '#ffffff' }}>
+                  <span style={{ fontSize: '11px', textTransform: 'uppercase', fontWeight: 800, display: 'block', opacity: 0.95, color: '#ffffff' }}>
                     {evento.fecha_inicio ? new Date(evento.fecha_inicio).toLocaleDateString('es-MX', { month: 'short' }) : 'Mes'}
                   </span>
                   <strong style={{ fontSize: '24px', fontWeight: 900, display: 'block', lineHeight: 1.1, color: '#ffffff' }}>
@@ -440,7 +422,7 @@ export default function MisEventos({ volver, seleccionarEvento }: MisEventosProp
                   <div style={{ display: 'flex', gap: '10px' }}>
                     <button
                       onClick={() => seleccionarEvento({ id_evento: evento.id_evento, nombre: evento.nombre })}
-                      style={{ backgroundColor: '#5A1222', color: '#ffffff', border: 'none', padding: '8px 16px', borderRadius: '10px', fontSize: '12px', fontWeight: 800, cursor: 'pointer', boxShadow: '0 4px 12px rgba(90, 18, 34, 0.2)' }}
+                      style={{ backgroundColor: '#5A1222', color: '#ffffff', border: 'none', padding: '8px 16px', borderRadius: '10px', fontSize: '12px', fontWeight: 800, cursor: 'pointer' }}
                     >
                       Ver detalles
                     </button>

@@ -20,34 +20,41 @@ export default function MapaTodosLugares({ seleccionarLugar }: MapaTodosLugaresP
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    async function cargarLugares() {
-      setCargando(true)
-      setError(null)
+  let isMounted = true
 
-      const resultado = await obtenerLugares()
+  async function cargarLugares() {
+    setCargando(true)
+    setError(null)
 
-      if (resultado.error) {
-        setError('No se pudieron cargar los lugares.')
-        setCargando(false)
-        return
-      }
+    const resultado = await obtenerLugares()
 
-      const lugaresConUbicacion = (resultado.data || [])
-        .filter(lugar => lugar.latitud !== null && lugar.longitud !== null)
-        .map(lugar => ({
-          id_lugar: lugar.id_lugar,
-          nombre: lugar.nombre,
-          latitud: lugar.latitud,
-          longitud: lugar.longitud
-        }))
+   if (!isMounted) return
 
-      setLugares(lugaresConUbicacion)
+    if (resultado.error) {
+      setError('No se pudieron cargar los lugares.')
       setCargando(false)
+      return
     }
 
-    cargarLugares()
-  }, [])
+    const lugaresConUbicacion = (resultado.data || [])
+      .filter(lugar => lugar.latitud !== null && lugar.longitud !== null)
+      .map(lugar => ({
+        id_lugar: lugar.id_lugar,
+        nombre: lugar.nombre,
+        latitud: lugar.latitud,
+        longitud: lugar.longitud
+      }))
 
+    setLugares(lugaresConUbicacion)
+    setCargando(false)
+  }
+
+  cargarLugares()
+
+  return () => {
+    isMounted = false 
+  }
+}, [])
   if (cargando) {
     return (
       <div className="dashboard-card">

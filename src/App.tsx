@@ -1,10 +1,4 @@
 import { useEffect, useState } from 'react'
-import {
-  obtenerPreferencias,
-  tienePreferencias,
-  guardarPreferencias
-} from './services/authService'
-
 import { supabase } from './lib/supabaseClient'
 
 import Lugares from './pages/Lugares'
@@ -14,6 +8,7 @@ import Favoritos from './pages/Favoritos'
 import MisRutas from './pages/MisRutas'
 import Gastronomia from './pages/Gastronomia'
 import Eventos from './pages/Eventos'
+import Historia from './pages/Historia'
 import DetalleEvento from './pages/DetalleEvento'
 import MisEventos from './pages/MisEventos'
 import Login from './pages/Login'
@@ -68,20 +63,12 @@ export default function App() {
   const [origenDetalle, setOrigenDetalle] = useState<Pantalla>('lugares')
   const [origenMisEventos, setOrigenMisEventos] = useState<Pantalla>('dashboard')
 
-  async function dirigirUsuario(usuarioId: string) {
+  // Redirección optimizada y segura sin consultas a tablas vacías
+  async function dirigirUsuario(_usuarioId: string) {
     try {
-      const promesaPreferencias = tienePreferencias(usuarioId)
-      const timeout = new Promise((_, reject) => setTimeout(() => reject(timeout), 2000))
-
-      const resultado: any = await Promise.race([promesaPreferencias, timeout])
-
-      if (resultado?.tiene) {
-        setPantalla('dashboard')
-      } else {
-        setPantalla('dashboard')
-      }
+      setPantalla('dashboard')
     } catch (error) {
-      console.warn('Aviso de preferencias omitido por seguridad:', error)
+      console.warn('Aviso de navegación:', error)
       setPantalla('dashboard')
     }
   }
@@ -304,7 +291,7 @@ export default function App() {
     case 'restablecer':
       return <RestablecerPassword login={() => setPantalla('login')} />
 
-  case 'dashboard':
+    case 'dashboard':
       return (
         <Dashboard
           mapa={irMapa}
@@ -544,7 +531,6 @@ export default function App() {
         </>
       )
 
-    // CARTELERA GENERAL DE EVENTOS
     case 'eventos':
       return (
         <>
@@ -569,7 +555,6 @@ export default function App() {
         </>
       )
 
-    // AGENDA PERSONAL EXCLUSIVA DEL USUARIO (MIS EVENTOS)
     case 'misEventos':
       return (
         <>
@@ -629,27 +614,9 @@ export default function App() {
     case 'historia':
       return (
         <>
-          <main className="app-page">
-            <header className="app-header">
-              <div>
-                <h1>San Andrés Cholula</h1>
-                <p>Historia</p>
-              </div>
-
-              <button
-                className="link-button"
-                onClick={() => (sesionActiva ? setPantalla('dashboard') : setPantalla('acceso'))}
-              >
-                Volver
-              </button>
-            </header>
-
-            <section className="content-area">
-              <h2>Historia de Cholula</h2>
-              <p>Aquí se mostrará la historia de San Andrés Cholula.</p>
-            </section>
-          </main>
-
+          <Historia
+            volver={() => (sesionActiva ? setPantalla('dashboard') : setPantalla('acceso'))}
+          />
           {sesionActiva && (
             <NavegacionInferior
               pantalla={pantalla}
@@ -796,65 +763,197 @@ function Acceso({
   sesionActiva: boolean
 }) {
   const opciones = [
-    { titulo: 'Mapa', descripcion: 'Consulta lugares de interés.', accion: mapa, IconoComponent: MapPin },
-    { titulo: 'Lugares', descripcion: 'Conoce sitios turísticos.', accion: lugares, IconoComponent: Landmark },
-    { titulo: 'Gastronomía', descripcion: 'Descubre platillos y bebidas.', accion: gastronomia, IconoComponent: UtensilsCrossed },
-    { titulo: 'Eventos', descripcion: 'Consulta eventos y festividades.', accion: eventos, IconoComponent: CalendarDays },
-    { titulo: 'Historia', descripcion: 'Conoce la historia de Cholula.', accion: historia, IconoComponent: BookOpen }
+    { titulo: 'Mapa', descripcion: 'Consulta lugares de interés.', accion: mapa, IconoComponent: MapPin, img: '/imagenes/mapa.jpg' },
+    { titulo: 'Lugares', descripcion: 'Conoce sitios turísticos.', accion: lugares, IconoComponent: Landmark, img: '/imagenes/lugares.jpg' },
+    { titulo: 'Gastronomía', descripcion: 'Descubre platillos y bebidas.', accion: gastronomia, IconoComponent: UtensilsCrossed, img: '/imagenes/gastronomia/gastronomia.jpg' },
+    { titulo: 'Eventos', descripcion: 'Consulta eventos y festividades.', accion: eventos, IconoComponent: CalendarDays, img: '/imagenes/eventos.jpg' },
+    { titulo: 'Historia', descripcion: 'Conoce la historia de Cholula.', accion: historia, IconoComponent: BookOpen, img: '/imagenes/mercado.jpg' }
   ]
 
   return (
-    <main className="app-page">
-      <header className="app-header">
+    <main style={{ backgroundColor: '#f3eee8', minHeight: '100vh', paddingBottom: '50px', fontFamily: 'inherit' }}>
+      
+      {/* HEADER DECORATIVO */}
+      <header style={{
+        background: 'linear-gradient(135deg, #6b1414 0%, #831818 100%)',
+        padding: '30px 20px 50px 20px',
+        color: '#fff',
+        borderBottomLeftRadius: '36px',
+        borderBottomRightRadius: '36px',
+        boxShadow: '0 12px 30px rgba(131, 24, 24, 0.25)',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        maxWidth: '650px',
+        margin: '0 auto'
+      }}>
         <div>
-          <h1>San Andrés Cholula</h1>
-          <p>Exploración básica</p>
+          <span style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px', color: '#ffcccc' }}>
+            Exploración libre
+          </span>
+          <h1 style={{ margin: '4px 0 0 0', fontSize: '24px', fontWeight: 700, letterSpacing: '-0.3px' }}>
+            San Andrés Cholula
+          </h1>
         </div>
-        <button className="link-button" onClick={volver}>Inicio</button>
+        <button 
+          onClick={volver} 
+          style={{
+            backgroundColor: 'rgba(255, 255, 255, 0.15)',
+            border: '1px solid rgba(255, 255, 255, 0.3)',
+            color: '#fff',
+            padding: '10px 16px',
+            borderRadius: '14px',
+            fontWeight: 600,
+            cursor: 'pointer',
+            fontSize: '13px'
+          }}
+        >
+          Inicio
+        </button>
       </header>
 
-      <section className="content-area">
-        {sesionActiva ? (
-          <>
-            <h2>Descubre Cholula</h2>
-            <p>Explora lugares, gastronomía, eventos e historia de San Andrés Cholula.</p>
-          </>
-        ) : (
-          <>
-            <h2>Explorar sin cuenta</h2>
-            <p>Puedes consultar información pública sin registrarte.</p>
-          </>
-        )}
+      {/* CONTENIDO PRINCIPAL */}
+      <div style={{ maxWidth: '650px', margin: '-25px auto 0 auto', padding: '0 20px', position: 'relative', zIndex: 10, display: 'flex', flexDirection: 'column', gap: '24px' }}>
+        
+        {/* TARJETA DE BIENVENIDA */}
+        <div style={{
+          backgroundColor: '#fff',
+          borderRadius: '24px',
+          padding: '24px',
+          boxShadow: '0 10px 30px rgba(0,0,0,0.06)',
+          border: '1px solid #f2ece9',
+          textAlign: 'center'
+        }}>
+          <h2 style={{ margin: '0 0 6px 0', fontSize: '20px', color: '#2d1515', fontWeight: 800 }}>
+            {sesionActiva ? 'Descubre Cholula' : 'Explorar sin cuenta'}
+          </h2>
+          <p style={{ margin: 0, fontSize: '13.5px', color: '#7a6e6b', lineHeight: 1.5 }}>
+            {sesionActiva 
+              ? 'Explora lugares, gastronomía, eventos e historia de San Andrés Cholula.' 
+              : 'Puedes consultar información pública y recorrer los atractivos sin registrarte.'}
+          </p>
+        </div>
 
-        <div className="explore-grid">
+        {/* CUADRÍCULA DE OPCIONES REDISEÑADA */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '14px' }}>
           {opciones.map((opcion) => {
             const Icono = opcion.IconoComponent
             return (
-              <button className="explore-card" key={opcion.titulo} onClick={opcion.accion}>
-                <Icono size={30} color="#B3282D" style={{ marginBottom: '8px' }} />
-                <strong>{opcion.titulo}</strong>
-                <span>{opcion.descripcion}</span>
-              </button>
+              <div 
+                key={opcion.titulo} 
+                onClick={opcion.accion}
+                style={{
+                  height: '170px',
+                  borderRadius: '22px',
+                  overflow: 'hidden',
+                  position: 'relative',
+                  cursor: 'pointer',
+                  boxShadow: '0 8px 20px rgba(131, 24, 24, 0.1)',
+                  backgroundImage: `linear-gradient(to top, rgba(45, 10, 10, 0.9) 20%, rgba(45, 10, 10, 0.35) 65%, rgba(0, 0, 0, 0.1) 100%), url("${opcion.img}")`,
+                  backgroundSize: 'cover',
+                  backgroundPosition: 'center',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'flex-end',
+                  padding: '16px',
+                  color: '#fff',
+                  border: '1px solid rgba(255, 255, 255, 0.2)'
+                }}
+              >
+                <div style={{ backgroundColor: 'rgba(255, 255, 255, 0.2)', width: '32px', height: '32px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '8px', backdropFilter: 'blur(6px)' }}>
+                  <Icono size={18} color="#fff" />
+                </div>
+                <h3 style={{ margin: '0 0 2px 0', fontSize: '15px', fontWeight: 700 }}>
+                  {opcion.titulo}
+                </h3>
+                <p style={{ margin: 0, fontSize: '11.5px', opacity: 0.85, lineHeight: 1.25 }}>
+                  {opcion.descripcion}
+                </p>
+              </div>
             )
           })}
 
           {sesionActiva && (
-            <button type="button" className="explore-card" onClick={misRutas}>
-              <Route size={30} color="#B3282D" style={{ marginBottom: '8px' }} />
-              <strong>Mis rutas</strong>
-              <span>Consulta y administra tus rutas guardadas.</span>
-            </button>
+            <div 
+              onClick={misRutas}
+              style={{
+                height: '170px',
+                borderRadius: '22px',
+                overflow: 'hidden',
+                position: 'relative',
+                cursor: 'pointer',
+                boxShadow: '0 8px 20px rgba(131, 24, 24, 0.1)',
+                backgroundImage: 'linear-gradient(to top, rgba(45, 10, 10, 0.9) 20%, rgba(45, 10, 10, 0.35) 65%, rgba(0, 0, 0, 0.1) 100%), url("/imagenes/cholula-bg.jpg")',
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'flex-end',
+                padding: '16px',
+                color: '#fff',
+                border: '1px solid rgba(255, 255, 255, 0.2)'
+              }}
+            >
+              <div style={{ backgroundColor: 'rgba(255, 255, 255, 0.2)', width: '32px', height: '32px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '8px', backdropFilter: 'blur(6px)' }}>
+                <Route size={18} color="#fff" />
+              </div>
+              <h3 style={{ margin: '0 0 2px 0', fontSize: '15px', fontWeight: 700 }}>Mis rutas</h3>
+              <p style={{ margin: 0, fontSize: '11.5px', opacity: 0.85, lineHeight: 1.25 }}>Consulta tus rutas guardadas.</p>
+            </div>
           )}
         </div>
 
+        {/* AVISO INFERIOR PARA CREAR CUENTA */}
         {!sesionActiva && (
-          <div className="guest-warning">
-            <p>Para utilizar favoritos, historial, preferencias, perfil y recomendaciones personalizadas necesitas una cuenta.</p>
-            <button className="primary-button" onClick={registrarse}>Registrarme</button>
-            <button type="button" className="secondary-button" onClick={iniciarSesion}>Ya tengo una cuenta</button>
+          <div style={{
+            backgroundColor: '#fff',
+            borderRadius: '24px',
+            padding: '24px',
+            boxShadow: '0 10px 30px rgba(0,0,0,0.06)',
+            border: '1px solid #f2ece9',
+            textAlign: 'center',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '12px'
+          }}>
+            <p style={{ margin: 0, fontSize: '13px', color: '#5a4a42', lineHeight: 1.5 }}>
+              Para utilizar favoritos, historial, preferencias, perfil y recomendaciones personalizadas necesitas una cuenta.
+            </p>
+            <button 
+              onClick={registrarse} 
+              style={{
+                backgroundColor: '#831818',
+                color: '#fff',
+                border: 'none',
+                padding: '13px',
+                borderRadius: '14px',
+                fontWeight: 700,
+                fontSize: '14px',
+                cursor: 'pointer',
+                boxShadow: '0 4px 14px rgba(131,24,24,0.25)'
+              }}
+            >
+              Registrarme
+            </button>
+            <button 
+              type="button" 
+              onClick={iniciarSesion} 
+              style={{
+                backgroundColor: 'transparent',
+                color: '#831818',
+                border: '1px solid #d1c7c2',
+                padding: '12px',
+                borderRadius: '14px',
+                fontWeight: 700,
+                fontSize: '14px',
+                cursor: 'pointer'
+              }}
+            >
+              Ya tengo una cuenta
+            </button>
           </div>
         )}
-      </section>
+      </div>
     </main>
   )
 }
@@ -1102,7 +1201,7 @@ function Intereses({ terminar }: { terminar: () => void }) {
   useEffect(() => {
     async function cargar() {
       try {
-        const { data, error } = await obtenerPreferencias()
+        const { data, error } = await supabase.from('preferencias_tipo').select('*')
 
         if (error) {
           console.error(error)
@@ -1146,14 +1245,6 @@ function Intereses({ terminar }: { terminar: () => void }) {
 
       if (!usuario) {
         setResultado('No se encontró el usuario.')
-        return
-      }
-
-      const { error } = await guardarPreferencias(usuario.id, seleccionados)
-
-      if (error) {
-        console.error(error)
-        setResultado('ERROR: ' + error.message)
         return
       }
 

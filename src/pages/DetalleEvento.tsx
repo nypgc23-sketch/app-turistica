@@ -47,14 +47,19 @@ export default function DetalleEvento({
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [agendado, setAgendado] = useState(false)
+  //const idEvento = evento?.id_evento;
 
   useEffect(() => {
+    let activo = true
+
     async function cargarDetalle() {
       setCargando(true)
       setError(null)
 
       try {
         const { data: eventoData, error: eventoError } = await obtenerEventoPorId(evento.id_evento)
+
+        if (!activo) return
 
         if (eventoError || !eventoData) {
           setError('No se pudo cargar la información del evento.')
@@ -70,6 +75,7 @@ export default function DetalleEvento({
             .eq('id_lugar', eventoData.id_lugar)
             .maybeSingle()
 
+          if (!activo) return
           lugarInfo = lugarData
         }
 
@@ -77,21 +83,31 @@ export default function DetalleEvento({
           ...eventoData,
           lugares_turisticos: lugarInfo
         })
-
-        // Verificar si ya está agendado
         const { agendado: estadoAgendado } = await estaAgendado(evento.id_evento)
-        setAgendado(estadoAgendado)
+        
+        if (activo) {
+          setAgendado(estadoAgendado)
+        }
 
       } catch (err) {
-        console.error('Error al cargar detalle del evento:', err)
-        setError('Ocurrió un error inesperado.')
+        if (activo) {
+          console.error('Error al cargar detalle del evento:', err)
+          setError('Ocurrió un error inesperado.')
+        }
       } finally {
-        setCargando(false)
+        if (activo) {
+          setCargando(false)
+        }
       }
     }
 
     cargarDetalle()
-  }, [evento.id_evento])
+
+   
+    return () => {
+      activo = false
+    }
+  }, [evento?.id_evento])
 
   const manejarAgendar = async () => {
     if (agendado) {
