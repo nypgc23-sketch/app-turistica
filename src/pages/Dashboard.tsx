@@ -15,7 +15,8 @@ import {
   Compass,
   Menu,
   X,
-  ArrowRight
+  ArrowRight,
+  LogOut
 } from 'lucide-react'
 
 type DashboardProps = {
@@ -317,6 +318,12 @@ export default function Dashboard({
     setTextoBusqueda('')
     setResultadosBusqueda([])
     setBusquedaActiva(false)
+  }
+
+  // Función para cerrar sesión
+  async function cerrarSesion() {
+    await supabase.auth.signOut()
+    window.location.reload()
   }
 
   return (
@@ -719,6 +726,21 @@ export default function Dashboard({
               >
                 <BookOpen size={20} />
                 Historia
+              </button>
+
+              {/* BOTÓN NUEVO: CERRAR SESIÓN */}
+              <button
+                type="button"
+                onClick={cerrarSesion}
+                style={{
+                  color: '#B3282D',
+                  marginTop: '12px',
+                  borderTop: '1px solid #f2ece9',
+                  paddingTop: '16px'
+                }}
+              >
+                <LogOut size={20} color="#B3282D" />
+                Cerrar sesión
               </button>
             </div>
           </div>

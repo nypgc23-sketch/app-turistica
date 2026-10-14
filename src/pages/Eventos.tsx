@@ -85,39 +85,65 @@ export default function Eventos({ volver, seleccionarEvento }: EventosProps) {
   }
 
   const eventosFiltrados = useMemo(() => {
-    if (filtroActivo === 'todos') return eventos
+    let filtrados = eventos
 
-    const ahora = new Date()
-    const anioActual = ahora.getFullYear()
+    if (filtroActivo !== 'todos') {
+      const ahora = new Date()
+      const anioActual = ahora.getFullYear()
 
-    return eventos.filter(evento => {
-      if (!evento.fecha_inicio) return false
-      const fechaEv = new Date(evento.fecha_inicio)
-      if (isNaN(fechaEv.getTime())) return false
+      filtrados = eventos.filter(evento => {
+        if (!evento.fecha_inicio) return false
+        const fechaEv = new Date(evento.fecha_inicio)
+        if (isNaN(fechaEv.getTime())) return false
 
-      if (filtroActivo === 'mes') {
-        return fechaEv.getUTCMonth() === mesSeleccionado && fechaEv.getUTCFullYear() === anioActual
+        if (filtroActivo === 'mes') {
+          return fechaEv.getUTCMonth() === mesSeleccionado && fechaEv.getUTCFullYear() === anioActual
+        }
+
+        if (filtroActivo === 'semana') {
+          const primerDiaSemana = new Date(ahora)
+          const diaSemana = ahora.getDay()
+          const diff = ahora.getDate() - diaSemana + (diaSemana === 0 ? -6 : 1)
+          primerDiaSemana.setDate(diff)
+          primerDiaSemana.setHours(0, 0, 0, 0)
+
+          const ultimoDiaSemana = new Date(primerDiaSemana)
+          ultimoDiaSemana.setDate(primerDiaSemana.getDate() + 6)
+          ultimoDiaSemana.setHours(23, 59, 59, 999)
+
+          return fechaEv >= primerDiaSemana && fechaEv <= ultimoDiaSemana
+        }
+
+        if (filtroActivo === 'dia') {
+          return fechaEv.toDateString() === ahora.toDateString()
+        }
+
+        return true
+      })
+    }
+
+    // ORDENAMIENTO INTELIGENTE: Próximos eventos primero, pasados al fondo
+    const hoy = new Date()
+    hoy.setHours(0, 0, 0, 0)
+
+    return [...filtrados].sort((a, b) => {
+      const fechaA = a.fecha_inicio ? new Date(a.fecha_inicio) : new Date(0)
+      const fechaB = b.fecha_inicio ? new Date(b.fecha_inicio) : new Date(0)
+
+      const esPasadaA = fechaA < hoy
+      const esPasadaB = fechaB < hoy
+
+      // 1. Si uno ya pasó y el otro no, el futuro va primero
+      if (!esPasadaA && esPasadaB) return -1
+      if (esPasadaA && !esPasadaB) return 1
+
+      // 2. Si ambos son futuros, ordenar del más cercano al más lejano (ascendente)
+      if (!esPasadaA && !esPasadaB) {
+        return fechaA.getTime() - fechaB.getTime()
       }
 
-      if (filtroActivo === 'semana') {
-        const primerDiaSemana = new Date(ahora)
-        const diaSemana = ahora.getDay()
-        const diff = ahora.getDate() - diaSemana + (diaSemana === 0 ? -6 : 1)
-        primerDiaSemana.setDate(diff)
-        primerDiaSemana.setHours(0, 0, 0, 0)
-
-        const ultimoDiaSemana = new Date(primerDiaSemana)
-        ultimoDiaSemana.setDate(primerDiaSemana.getDate() + 6)
-        ultimoDiaSemana.setHours(23, 59, 59, 999)
-
-        return fechaEv >= primerDiaSemana && fechaEv <= ultimoDiaSemana
-      }
-
-      if (filtroActivo === 'dia') {
-        return fechaEv.toDateString() === ahora.toDateString()
-      }
-
-      return true
+      // 3. Si ambos ya pasaron, ordenar del más reciente al más antiguo al fondo
+      return fechaB.getTime() - fechaA.getTime()
     })
   }, [eventos, filtroActivo, mesSeleccionado])
 

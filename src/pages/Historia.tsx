@@ -26,10 +26,11 @@ export default function Historia({ volver }: HistoriaProps) {
 
   async function cargarHistoria() {
     setCargando(true)
+    // ORDENAMIENTO: Cambiamos a 'descending: true' para mostrar lo más reciente primero
     const { data, error } = await supabase
       .from('historia_cholula')
       .select('*')
-      .order('orden', { ascending: true })
+      .order('orden', { ascending: false })
 
     if (!error && data) {
       setArticulos(data)
@@ -55,7 +56,7 @@ export default function Historia({ volver }: HistoriaProps) {
           <Compass size={240} color="#ffffff" />
         </div>
 
-        <div style={{ maxWidth: '750px', margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'relative', zIndex: 2 }}>
+        <div style={{ maxWidth: '750px', margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'relative', zIndex: 2, flexWrap: 'wrap', gap: '12px' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
               <Sparkles size={16} color="#fca5a5" />
@@ -63,7 +64,7 @@ export default function Historia({ volver }: HistoriaProps) {
                 Patrimonio Milenario
               </span>
             </div>
-            <h1 style={{ margin: 0, fontSize: '30px', fontWeight: 900, letterSpacing: '-0.5px' }}>
+            <h1 style={{ margin: 0, fontSize: '28px', fontWeight: 900, letterSpacing: '-0.5px' }}>
               Historia de Cholula
             </h1>
           </div>
@@ -92,8 +93,8 @@ export default function Historia({ volver }: HistoriaProps) {
         </div>
       </header>
 
-      {/* CONTENEDOR DE TARJETAS FLOTANTES */}
-      <div style={{ maxWidth: '750px', margin: '-35px auto 0 auto', padding: '0 20px', position: 'relative', zIndex: 10 }}>
+      {/* CONTENEDOR DE TARJETAS FLOTANTES RESPONSIVO */}
+      <div style={{ maxWidth: '750px', margin: '-35px auto 0 auto', padding: '0 16px', position: 'relative', zIndex: 10, width: '100%', boxSizing: 'border-box' }}>
         
         {cargando && (
           <div style={{ backgroundColor: '#ffffff', padding: '50px', borderRadius: '28px', textAlign: 'center', boxShadow: '0 10px 30px rgba(0,0,0,0.05)' }}>
@@ -122,15 +123,15 @@ export default function Historia({ volver }: HistoriaProps) {
                   overflow: 'hidden',
                   boxShadow: '0 15px 45px rgba(131, 24, 24, 0.08)',
                   border: '1px solid #f2e6e3',
-                  padding: '28px',
+                  padding: '24px sm: 28px',
                   position: 'relative'
                 }}
               >
                 {/* Indicador numérico decorativo */}
                 <div style={{
                   position: 'absolute',
-                  top: '24px',
-                  right: '24px',
+                  top: '20px',
+                  right: '20px',
                   backgroundColor: '#fdf2f2',
                   color: '#831818',
                   width: '32px',
@@ -147,7 +148,7 @@ export default function Historia({ volver }: HistoriaProps) {
                 </div>
 
                 {art.epoca && (
-                  <div style={{ marginBottom: '14px' }}>
+                  <div style={{ marginBottom: '14px', paddingRight: '40px' }}>
                     <span style={{ 
                       backgroundColor: '#831818', 
                       color: '#ffffff', 
@@ -166,11 +167,11 @@ export default function Historia({ volver }: HistoriaProps) {
                   </div>
                 )}
 
-                <h2 style={{ margin: '0 0 14px 0', fontSize: '22px', fontWeight: 900, color: '#2d1515', lineHeight: 1.35, paddingRight: '30px' }}>
+                <h2 style={{ margin: '0 0 14px 0', fontSize: '21px', fontWeight: 900, color: '#2d1515', lineHeight: 1.35, paddingRight: '20px' }}>
                   {art.titulo}
                 </h2>
 
-                <p style={{ margin: '0 0 20px 0', fontSize: '14.5px', color: '#4a3f3c', lineHeight: 1.75, whiteSpace: 'pre-line' }}>
+                <p style={{ margin: '0 0 20px 0', fontSize: '14px', color: '#4a3f3c', lineHeight: 1.75, whiteSpace: 'pre-line' }}>
                   {art.contenido}
                 </p>
 
@@ -184,7 +185,8 @@ export default function Historia({ volver }: HistoriaProps) {
                     boxShadow: '0 10px 30px rgba(0,0,0,0.1)',
                     display: 'flex',
                     justifyContent: 'center',
-                    alignItems: 'center'
+                    alignItems: 'center',
+                    width: '100%'
                   }}>
                     {art.tipo_multimedia === 'video' ? (
                       <div style={{ position: 'relative', width: '100%', paddingBottom: '56.25%', height: 0 }}>
@@ -204,8 +206,7 @@ export default function Historia({ volver }: HistoriaProps) {
                           maxHeight: '450px', 
                           objectFit: 'contain', 
                           display: 'block',
-                          backgroundColor: '#f9f6f5',
-                          transition: 'transform 0.3s ease'
+                          backgroundColor: '#f9f6f5'
                         }} 
                       />
                     )}

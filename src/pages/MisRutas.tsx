@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabaseClient'
 import MapaRuta from '../components/MapaRuta'
 import { 
   Calendar, ChevronRight, Route, 
-  Trash2, Coffee, ArrowLeft, CheckCircle, Check, Copy, Navigation, MapPin, Plus, X, Utensils, Flag, CalendarDays, Layers, Store
+  Trash2, Coffee, ArrowLeft, CheckCircle, Check, Navigation, MapPin, Plus, X, Utensils, Flag, CalendarDays, Layers, Store
 } from 'lucide-react'
 
 type Ruta = {
@@ -12,6 +12,13 @@ type Ruta = {
   descripcion: string | null
   duracion_dias: number
   completada?: boolean
+  created_at?: string | null
+  fecha_creacion?: string | null
+  fecha_creacion_ruta?: string | null
+  updated_at?: string | null
+  fecha_actualizacion?: string | null
+  completed_at?: string | null
+  fecha_completada?: string | null
 }
 
 type LugarRuta = {
@@ -99,11 +106,13 @@ function estimarTiempoTrayecto(puntos: LugarRuta[]) {
 
 export default function MisRutas({ volver, seleccionarLugar }: MisRutasProps) {
   const [rutas, setRutas] = useState<Ruta[]>([])
+  const [ordenRutas, setOrdenRutas] = useState<'recientes' | 'antiguas'>('recientes')
   const [rutaSeleccionada, setRutaSeleccionada] = useState<Ruta | null>(null)
   const [lugares, setLugares] = useState<LugarRuta[]>([])
   const [diaActivo, setDiaActivo] = useState<number>(1)
   
   const [abrirModalGenerar, setAbrirModalGenerar] = useState(false)
+  const [abrirModalAgregarLugar, setAbrirModalAgregarLugar] = useState(false)
   const [nombreNuevaRuta, setNombreNuevaRuta] = useState('')
   const [fechaInicioRuta, setFechaInicioRuta] = useState('')
   const [duracionDias, setDuracionDias] = useState<1 | 2>(2)
@@ -118,12 +127,14 @@ export default function MisRutas({ volver, seleccionarLugar }: MisRutasProps) {
   const [comerciosSeleccionadosIds, setComerciosSeleccionadosIds] = useState<number[]>([])
   const [eventosSeleccionadosIds, setEventosSeleccionadosIds] = useState<number[]>([])
   const [gastronomiaSeleccionada, setGastronomiaSeleccionada] = useState<string[]>([])
+  const [lugarParaAgregarId, setLugarParaAgregarId] = useState<number | ''>('')
 
   const [cargando, setCargando] = useState(true)
   const [cargandoLugares, setCargandoLugares] = useState(false)
   const [guardandoEstado, setGuardandoEstado] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [mensaje, setMensaje] = useState<string | null>(null)
+  const [alertaDuracionMostrada, setAlertaDuracionMostrada] = useState(false)
 
   const fechaHoy = new Date().toISOString().split('T')[0]
   const fechaUnAnioDespues = new Date()
@@ -197,7 +208,7 @@ export default function MisRutas({ volver, seleccionarLugar }: MisRutasProps) {
 
   useEffect(() => {
     if (!mensaje) return
-    const timer = setTimeout(() => setMensaje(null), 3000)
+    const timer = setTimeout(() => setMensaje(null), 3500)
     return () => clearTimeout(timer)
   }, [mensaje])
 
@@ -207,6 +218,7 @@ export default function MisRutas({ volver, seleccionarLugar }: MisRutasProps) {
     setCargandoLugares(true)
     setError(null)
     setMensaje(null)
+    setAlertaDuracionMostrada(false)
 
     const { data: detalles, error: errDetalles } = await supabase
       .from('detalle_ruta')
@@ -249,6 +261,13 @@ export default function MisRutas({ volver, seleccionarLugar }: MisRutasProps) {
     setCargandoLugares(false)
   }
 
+  useEffect(() => {
+    if (lugares.length > 5 && !alertaDuracionMostrada && rutaSeleccionada) {
+      setAlertaDuracionMostrada(true)
+      setMensaje('¡Atención! La ruta se ha actualizado automáticamente a dos días debido a la cantidad de lugares.')
+    }
+  }, [lugares.length, alertaDuracionMostrada, rutaSeleccionada])
+
   async function quitarLugar(idDetalleRuta: number) {
     if (!rutaSeleccionada) return
     setMensaje(null)
@@ -265,7 +284,65 @@ export default function MisRutas({ volver, seleccionarLugar }: MisRutasProps) {
     }
 
     setLugares(prev => prev.filter(l => l.id_detalle_ruta !== idDetalleRuta))
+    await registrarEdicionRuta(rutaSeleccionada.id_ruta)
     setMensaje('Lugar quitado de la ruta.')
+  }
+
+  async function agregarLugarARutaExistente(e: React.FormEvent) {
+    e.preventDefault()
+    if (!rutaSeleccionada || lugarParaAgregarId === '') return
+
+    const todosLosLugaresDisponibles = [...lugaresTuristicos, ...lugaresComerciales]
+    const lugarObj = todosLosLugaresDisponibles.find(l => l.id_lugar === Number(lugarParaAgregarId))
+    if (!lugarObj) return
+
+    const nuevoOrden = lugares.length + 1
+    const nuevoDia = nuevoOrden > 5 ? 2 : 1
+
+    const { data, error } = await supabase
+      .from('detalle_ruta')
+      .insert({
+        id_ruta: rutaSeleccionada.id_ruta,
+        id_lugar: Number(lugarParaAgregarId),
+        dia: nuevoDia,
+        orden_visita: nuevoOrden
+      })
+      .select(`
+        id_detalle_ruta,
+        id_lugar,
+        orden_visita,
+        dia,
+        lugares_turisticos (
+          nombre,
+          direccion,
+          latitud,
+          longitud
+        )
+      `)
+      .single()
+
+    if (error || !data) {
+      console.error('Error agregando lugar:', error)
+      setMensaje('No se pudo agregar el lugar a la ruta.')
+      return
+    }
+
+    const lugarAgregadoFormateado: LugarRuta = {
+      id_detalle_ruta: data.id_detalle_ruta,
+      id_lugar: data.id_lugar,
+      orden_visita: data.orden_visita,
+      dia: data.dia,
+      nombre: (data.lugares_turisticos as any)?.nombre || lugarObj.nombre,
+      direccion: (data.lugares_turisticos as any)?.direccion || lugarObj.direccion,
+      latitud: (data.lugares_turisticos as any)?.latitud !== null ? Number((data.lugares_turisticos as any).latitud) : (lugarObj.latitud !== null ? Number(lugarObj.latitud) : null),
+      longitud: (data.lugares_turisticos as any)?.longitud !== null ? Number((data.lugares_turisticos as any).longitud) : (lugarObj.longitud !== null ? Number(lugarObj.longitud) : null)
+    }
+
+    setLugares(prev => [...prev, lugarAgregadoFormateado])
+    await registrarEdicionRuta(rutaSeleccionada.id_ruta)
+    setAbrirModalAgregarLugar(false)
+    setLugarParaAgregarId('')
+    setMensaje('¡Lugar agregado con éxito a la ruta!')
   }
 
   async function eliminarRutaCompleta(idRuta: number, e: React.MouseEvent) {
@@ -292,58 +369,16 @@ export default function MisRutas({ volver, seleccionarLugar }: MisRutasProps) {
     setMensaje('¡Ruta eliminada con éxito!')
   }
 
-  async function clonarRuta(idRutaOriginal: number, e: React.MouseEvent) {
-    e.stopPropagation()
-    setMensaje('Clonando itinerario...')
-
-    const rutaOriginal = rutas.find(r => r.id_ruta === idRutaOriginal)
-    if (!rutaOriginal) return
-
-    const { data: nuevaRuta, error: errRuta } = await supabase
-      .from('rutas')
-      .insert({
-        tipo_ruta: 'manual',
-        nombre: `${rutaOriginal.nombre} (Copia)`,
-        descripcion: rutaOriginal.descripcion,
-        duracion_dias: rutaOriginal.duracion_dias,
-        estado: true
-      })
-      .select()
-      .single()
-
-    if (errRuta || !nuevaRuta) {
-      setMensaje('Error al duplicar la ruta.')
-      return
-    }
-
-    const { data: detalles } = await supabase
-      .from('detalle_ruta')
-      .select('*')
-      .eq('id_ruta', idRutaOriginal)
-
-    if (detalles && detalles.length > 0) {
-      const nuevosDetalles = detalles.map((d: any) => ({
-        id_ruta: nuevaRuta.id_ruta,
-        id_lugar: d.id_lugar,
-        dia: d.dia,
-        orden_visita: d.orden_visita
-      }))
-      await supabase.from('detalle_ruta').insert(nuevosDetalles)
-    }
-
-    setRutas(prev => [...prev, nuevaRuta])
-    setMensaje('¡Itinerario duplicado!')
-  }
-
   async function marcarCompletada(idRuta: number) {
     setGuardandoEstado(true)
     setMensaje(null)
 
     try {
       const nuevoEstado = !rutaSeleccionada?.completada
+      const fechaEstado = new Date().toISOString()
       const { error } = await supabase
         .from('rutas')
-        .update({ completada: nuevoEstado })
+        .update({ completada: nuevoEstado, completed_at: nuevoEstado ? fechaEstado : null })
         .eq('id_ruta', idRuta)
 
       if (error) {
@@ -353,8 +388,8 @@ export default function MisRutas({ volver, seleccionarLugar }: MisRutasProps) {
         return
       }
 
-      setRutaSeleccionada(prev => prev ? { ...prev, completada: nuevoEstado } : null)
-      setRutas(prev => prev.map(r => r.id_ruta === idRuta ? { ...r, completada: nuevoEstado } : r))
+      setRutaSeleccionada(prev => prev ? { ...prev, completada: nuevoEstado, completed_at: nuevoEstado ? fechaEstado : null } : null)
+      setRutas(prev => prev.map(r => r.id_ruta === idRuta ? { ...r, completada: nuevoEstado, completed_at: nuevoEstado ? fechaEstado : null } : r))
       setMensaje(nuevoEstado ? '¡Ruta marcada como terminada!' : 'Ruta marcada como pendiente.')
     } catch (err) {
       console.error(err)
@@ -371,6 +406,28 @@ export default function MisRutas({ volver, seleccionarLugar }: MisRutasProps) {
       return
     }
 
+    const nombreNormalizado = nombreNuevaRuta.trim().replace(/\s+/g, ' ').toLocaleLowerCase('es-MX')
+
+    const { data: rutasExistentes, error: errorNombres } = await supabase
+      .from('rutas')
+      .select('id_ruta, nombre')
+
+    if (errorNombres) {
+      console.error('Error verificando nombres de rutas:', errorNombres)
+      alert('No se pudo verificar si el nombre de la ruta ya existe. Inténtalo de nuevo.')
+      return
+    }
+
+    const nombreDuplicado = (rutasExistentes || []).some((ruta: { nombre: string | null }) =>
+      (ruta.nombre || '').trim().replace(/\s+/g, ' ').toLocaleLowerCase('es-MX') === nombreNormalizado
+    )
+
+    if (nombreDuplicado) {
+      alert('Ya existe una ruta con ese nombre. Elige un nombre diferente.')
+      return
+    }
+
+    const fechaCreacion = new Date().toISOString()
     const descripcionTexto = `Inicia el ${fechaInicioRuta || 'Próximamente'} (Duración: ${duracionDias} Día${duracionDias > 1 ? 's' : ''})${gastronomiaSeleccionada.length > 0 ? `. Gastronomía: ${gastronomiaSeleccionada.join(', ')}` : ''}`
 
     const { data: nuevaRuta, error: errRuta } = await supabase
@@ -380,7 +437,10 @@ export default function MisRutas({ volver, seleccionarLugar }: MisRutasProps) {
         nombre: nombreNuevaRuta.trim(),
         descripcion: descripcionTexto,
         duracion_dias: duracionDias,
-        estado: true
+        estado: true,
+        created_at: fechaCreacion,
+        updated_at: null,
+        completed_at: null
       })
       .select()
       .single()
@@ -415,6 +475,64 @@ export default function MisRutas({ volver, seleccionarLugar }: MisRutasProps) {
     setGastronomiaSeleccionada([])
     alert(`¡Tu ruta ha sido creada con éxito!`)
   }
+
+  const obtenerFechaCreacionRuta = (ruta: Ruta): Date | null => {
+    const valorFecha = ruta.created_at || ruta.fecha_creacion || ruta.fecha_creacion_ruta
+    if (!valorFecha) return null
+    const fecha = new Date(valorFecha)
+    return Number.isNaN(fecha.getTime()) ? null : fecha
+  }
+
+  const obtenerFechaEdicionRuta = (ruta: Ruta): Date | null => {
+    const valorFecha = ruta.updated_at || ruta.fecha_actualizacion
+    if (!valorFecha) return null
+    const fecha = new Date(valorFecha)
+    return Number.isNaN(fecha.getTime()) ? null : fecha
+  }
+
+  const obtenerFechaCompletadaRuta = (ruta: Ruta): Date | null => {
+    const valorFecha = ruta.completed_at || ruta.fecha_completada
+    if (!valorFecha) return null
+    const fecha = new Date(valorFecha)
+    return Number.isNaN(fecha.getTime()) ? null : fecha
+  }
+
+  const formatearFecha = (fecha: Date): string =>
+    fecha.toLocaleDateString('es-MX', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric'
+    })
+
+  async function registrarEdicionRuta(idRuta: number) {
+    const fechaEdicion = new Date().toISOString()
+    const { error } = await supabase
+      .from('rutas')
+      .update({ updated_at: fechaEdicion })
+      .eq('id_ruta', idRuta)
+
+    if (error) {
+      console.error('No se pudo registrar la fecha de edición:', error)
+      return null
+    }
+
+    setRutas(prev => prev.map(r =>
+      r.id_ruta === idRuta ? { ...r, updated_at: fechaEdicion } : r
+    ))
+    setRutaSeleccionada(prev =>
+      prev?.id_ruta === idRuta ? { ...prev, updated_at: fechaEdicion } : prev
+    )
+    return fechaEdicion
+  }
+
+  const rutasFiltradas = [...rutas].sort((a, b) => {
+    const fechaA = obtenerFechaCreacionRuta(a)?.getTime()
+    const fechaB = obtenerFechaCreacionRuta(b)?.getTime()
+    if (fechaA !== undefined && fechaB !== undefined) {
+      return ordenRutas === 'recientes' ? fechaB - fechaA : fechaA - fechaB
+    }
+    return ordenRutas === 'recientes' ? b.id_ruta - a.id_ruta : a.id_ruta - b.id_ruta
+  })
 
   const tieneMasDeCincoLugares = lugares.length > 5
 
@@ -451,6 +569,14 @@ export default function MisRutas({ volver, seleccionarLugar }: MisRutasProps) {
     })
 
   const { distanciaKm, tiempoMinutos } = estimarTiempoTrayecto(lugaresDelDia)
+
+  const idsLugaresEnRuta = lugares.map(l => l.id_lugar)
+
+  const lugaresDisponiblesParaAgregar = [...lugaresTuristicos, ...lugaresComerciales].filter(
+    (l, index, self) =>
+      !idsLugaresEnRuta.includes(l.id_lugar) &&
+      self.findIndex(item => item.id_lugar === l.id_lugar) === index
+  )
 
   if (cargando || (error && rutas.length === 0)) {
     return (
@@ -493,7 +619,7 @@ export default function MisRutas({ volver, seleccionarLugar }: MisRutasProps) {
         {rutaSeleccionada ? (
           <div className="detalle-ruta-contenido">
             <div className="stats-ruta-card" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-around', width: '100%', alignItems: 'center' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-around', width: '100%', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
                 <div className="stat-item">
                   <Calendar size={20} color="#B3282D" />
                   <span className="stat-label">Duración</span>
@@ -513,37 +639,130 @@ export default function MisRutas({ volver, seleccionarLugar }: MisRutasProps) {
                   <small style={{ fontSize: '11px', color: '#6e6462' }}>~{tiempoMinutos} min</small>
                 </div>
               </div>
-
-              <button
-                type="button"
-                className={`primary-button ${rutaSeleccionada.completada ? 'completada-btn' : ''}`}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '8px',
-                  marginTop: '8px',
-                  backgroundColor: rutaSeleccionada.completada ? '#2e7d32' : '#B3282D'
-                }}
-                onClick={() => marcarCompletada(rutaSeleccionada.id_ruta)}
-                disabled={guardandoEstado}
-              >
-                <CheckCircle size={18} color="#fff" />
-                {guardandoEstado
-                  ? 'Guardando...'
-                  : rutaSeleccionada.completada
-                  ? 'Ruta completada (Desmarcar)'
-                  : 'Marcar como terminada'}
-              </button>
             </div>
 
+            {/* MODAL PARA AGREGAR NUEVO LUGAR */}
+            {abrirModalAgregarLugar && (
+              <div style={{
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                width: '100vw',
+                height: '100vh',
+                backgroundColor: 'rgba(20, 10, 10, 0.5)',
+                backdropFilter: 'blur(6px)',
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                zIndex: 9999,
+                padding: '16px',
+                boxSizing: 'border-box'
+              }}>
+                <form 
+                  onSubmit={agregarLugarARutaExistente}
+                  style={{
+                    backgroundColor: '#ffffff',
+                    padding: '24px',
+                    borderRadius: '20px',
+                    width: '100%',
+                    maxWidth: '450px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '16px',
+                    boxShadow: '0 20px 40px rgba(0,0,0,0.2)',
+                    boxSizing: 'border-box'
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <h3 style={{ margin: 0, fontSize: '18px', color: '#2d1515' }}>Agregar nuevo lugar</h3>
+                    <button 
+                      type="button" 
+                      onClick={() => setAbrirModalAgregarLugar(false)}
+                      style={{ background: '#f8f1f1', border: 'none', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                    >
+                      <X size={16} color="#2d1515" />
+                    </button>
+                  </div>
+
+                  <p style={{ margin: 0, fontSize: '13px', color: '#6e6462' }}>
+                    Selecciona un lugar de la lista:
+                  </p>
+
+                  <select
+                    value={lugarParaAgregarId}
+                    onChange={(e) => setLugarParaAgregarId(e.target.value === '' ? '' : Number(e.target.value))}
+                    required
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      borderRadius: '12px',
+                      border: '1.5px solid #e8deda',
+                      backgroundColor: '#faf6f5',
+                      fontSize: '14px',
+                      outline: 'none',
+                      color: '#2d1515',
+                      boxSizing: 'border-box'
+                    }}
+                  >
+                    <option value="" disabled>-- Elige un lugar --</option>
+                    {lugaresDisponiblesParaAgregar.length === 0 ? (
+                      <option value="" disabled>No hay más lugares disponibles</option>
+                    ) : (
+                      lugaresDisponiblesParaAgregar.map(l => (
+                        <option key={l.id_lugar} value={l.id_lugar}>
+                          {l.nombre}
+                        </option>
+                      ))
+                    )}
+                  </select>
+
+                  <div style={{ display: 'flex', gap: '10px', marginTop: '8px', flexWrap: 'wrap' }}>
+                    <button
+                      type="submit"
+                      disabled={lugaresDisponiblesParaAgregar.length === 0}
+                      style={{
+                        flex: 1,
+                        backgroundColor: '#B3282D',
+                        color: '#fff',
+                        border: 'none',
+                        padding: '12px',
+                        borderRadius: '12px',
+                        fontWeight: 'bold',
+                        cursor: lugaresDisponiblesParaAgregar.length === 0 ? 'not-allowed' : 'pointer',
+                        opacity: lugaresDisponiblesParaAgregar.length === 0 ? 0.6 : 1
+                      }}
+                    >
+                      Añadir a la ruta
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAbrirModalAgregarLugar(false)}
+                      style={{
+                        flex: 0.6,
+                        backgroundColor: '#f2ece9',
+                        color: '#2d1515',
+                        border: 'none',
+                        padding: '12px',
+                        borderRadius: '12px',
+                        fontWeight: 'bold',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
+
             {/* BOTONES DE DÍA 1 Y DÍA 2 AUTOMÁTICOS */}
-            <div style={{ display: 'flex', gap: '12px', margin: '16px 0' }}>
+            <div style={{ display: 'flex', gap: '12px', margin: '16px 0', flexWrap: 'wrap' }}>
               <button
                 type="button"
                 onClick={() => setDiaActivo(1)}
                 style={{
                   flex: 1,
+                  minWidth: '120px',
                   padding: '12px',
                   borderRadius: '14px',
                   border: diaActivo === 1 ? '2px solid #B3282D' : '1px solid #f2ece9',
@@ -570,6 +789,7 @@ export default function MisRutas({ volver, seleccionarLugar }: MisRutasProps) {
                 }}
                 style={{
                   flex: 1,
+                  minWidth: '120px',
                   padding: '12px',
                   borderRadius: '14px',
                   border: diaActivo === 2 ? '2px solid #B3282D' : '1px solid #f2ece9',
@@ -597,13 +817,6 @@ export default function MisRutas({ volver, seleccionarLugar }: MisRutasProps) {
             ) : (
               <div className="itinerario-lista">
                 <div className="dia-grupo" style={{ marginBottom: '24px' }}>
-                  <div className="dia-header" style={{ marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span className="dia-badge" style={{ backgroundColor: '#B3282D', color: '#fff', padding: '6px 14px', borderRadius: '20px', fontSize: '13px', fontWeight: 'bold' }}>
-                      Mostrando itinerario del Día {diaActivo}
-                    </span>
-                    <span style={{ fontSize: '12px', color: '#6e6462' }}>Puedes eliminar lugares cuando lo desees</span>
-                  </div>
-
                   <div className="lugares-lista-dia" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                     {lugaresDelDia.map((lugar, idx) => (
                       <div
@@ -611,14 +824,17 @@ export default function MisRutas({ volver, seleccionarLugar }: MisRutasProps) {
                         className="lugar-item"
                         style={{
                           display: 'flex',
+                          flexDirection: 'row',
                           alignItems: 'center',
                           justifyContent: 'space-between',
-                          padding: '16px 20px',
+                          padding: '16px',
                           borderRadius: '16px',
                           border: '1px solid #f2ece9',
                           backgroundColor: '#fff',
                           boxShadow: '0 4px 12px rgba(179, 40, 45, 0.04)',
-                          cursor: 'pointer'
+                          cursor: 'pointer',
+                          flexWrap: 'wrap',
+                          gap: '12px'
                         }}
                         onClick={() =>
                           seleccionarLugar({
@@ -627,7 +843,7 @@ export default function MisRutas({ volver, seleccionarLugar }: MisRutasProps) {
                           })
                         }
                       >
-                        <div className="lugar-info" style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '16px', minWidth: 0 }}>
+                        <div className="lugar-info" style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '12px', minWidth: '220px' }}>
                           <span style={{ 
                             backgroundColor: '#B3282D', 
                             color: '#fff', 
@@ -645,17 +861,17 @@ export default function MisRutas({ volver, seleccionarLugar }: MisRutasProps) {
                             {idx + 1}
                           </span>
                           <div style={{ minWidth: 0, flex: 1 }}>
-                            <h4 style={{ margin: 0, fontSize: '16px', color: '#2d1515', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            <h4 style={{ margin: 0, fontSize: '15px', color: '#2d1515', fontWeight: 700, wordBreak: 'break-word' }}>
                               {lugar.nombre}
                             </h4>
-                            <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#6e6462', display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            <p style={{ margin: '4px 0 0 0', fontSize: '12.5px', color: '#6e6462', display: 'flex', alignItems: 'center', gap: '4px', wordBreak: 'break-word' }}>
                               <MapPin size={13} color="#B3282D" style={{ flexShrink: 0 }} /> 
-                              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{lugar.direccion || 'Ubicación central en Cholula'}</span>
+                              <span>{lugar.direccion || 'Ubicación central en Cholula'}</span>
                             </p>
                           </div>
                         </div>
 
-                        <div className="lugar-acciones" style={{ display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0, marginLeft: '12px' }}>
+                        <div className="lugar-acciones" style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0, marginLeft: 'auto' }}>
                           <button
                             className="icon-btn"
                             title="Quitar lugar de la ruta"
@@ -669,12 +885,39 @@ export default function MisRutas({ volver, seleccionarLugar }: MisRutasProps) {
                             <Trash2 size={16} color="#B3282D" />
                           </button>
                           
-                          <span style={{ display: 'flex', alignItems: 'center', gap: '2px', fontSize: '13px', fontWeight: 700, color: '#B3282D' }}>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '2px', fontSize: '12.5px', fontWeight: 700, color: '#B3282D', whiteSpace: 'nowrap' }}>
                             Ver lugar <ChevronRight size={16} color="#B3282D" />
                           </span>
                         </div>
                       </div>
                     ))}
+                  </div>
+
+                  {/* BOTÓN PARA AGREGAR NUEVO LUGAR */}
+                  <div style={{ margin: '20px 0' }}>
+                    <button
+                      type="button"
+                      onClick={() => setAbrirModalAgregarLugar(true)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '8px',
+                        backgroundColor: '#ffffff',
+                        color: '#B3282D',
+                        border: '1.5px solid #B3282D',
+                        borderRadius: '14px',
+                        padding: '14px',
+                        fontWeight: '700',
+                        width: '100%',
+                        cursor: 'pointer',
+                        boxShadow: '0 4px 12px rgba(179, 40, 45, 0.08)',
+                        transition: 'all 0.2s',
+                        boxSizing: 'border-box'
+                      }}
+                    >
+                      <Plus size={18} /> Agregar nuevo lugar a esta ruta
+                    </button>
                   </div>
 
                   {/* MAPA ACTUALIZADO */}
@@ -690,7 +933,53 @@ export default function MisRutas({ volver, seleccionarLugar }: MisRutasProps) {
               </div>
             )}
 
-            {mensaje && <p className="resultado">{mensaje}</p>}
+            {mensaje && (
+              <div style={{
+                backgroundColor: '#fff3cd',
+                color: '#856404',
+                padding: '12px 16px',
+                borderRadius: '12px',
+                border: '1px solid #ffeeba',
+                fontSize: '14px',
+                fontWeight: '600',
+                textAlign: 'center',
+                margin: '12px 0'
+              }}>
+                {mensaje}
+              </div>
+            )}
+
+            {/* BOTÓN MARCAR COMO TERMINADA */}
+            <button
+              type="button"
+              className={`primary-button ${rutaSeleccionada.completada ? 'completada-btn' : ''}`}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                backgroundColor: rutaSeleccionada.completada ? '#2e7d32' : '#B3282D',
+                width: '100%',
+                padding: '16px',
+                borderRadius: '14px',
+                color: '#fff',
+                border: 'none',
+                fontWeight: 'bold',
+                cursor: 'pointer',
+                marginTop: '12px',
+                boxShadow: '0 6px 16px rgba(179, 40, 45, 0.2)',
+                boxSizing: 'border-box'
+              }}
+              onClick={() => marcarCompletada(rutaSeleccionada.id_ruta)}
+              disabled={guardandoEstado}
+            >
+              <CheckCircle size={18} color="#fff" />
+              {guardandoEstado
+                ? 'Guardando...'
+                : rutaSeleccionada.completada
+                ? 'Ruta completada (Desmarcar)'
+                : 'Marcar como terminada'}
+            </button>
 
             <button
               className="btn-bottom-action"
@@ -702,13 +991,14 @@ export default function MisRutas({ volver, seleccionarLugar }: MisRutasProps) {
                 gap: '8px',
                 width: '100%',
                 padding: '14px',
-                marginTop: '16px',
+                marginTop: '12px',
                 backgroundColor: '#333',
                 color: '#fff',
                 borderRadius: '12px',
                 border: 'none',
                 cursor: 'pointer',
-                fontWeight: 600
+                fontWeight: 600,
+                boxSizing: 'border-box'
               }}
             >
               <ArrowLeft size={20} color="#fff" /> Volver a mis rutas
@@ -735,7 +1025,8 @@ export default function MisRutas({ volver, seleccionarLugar }: MisRutasProps) {
                   boxShadow: '0 8px 20px rgba(179, 40, 45, 0.25)',
                   width: '100%',
                   justifyContent: 'center',
-                  transition: 'transform 0.2s ease'
+                  transition: 'transform 0.2s ease',
+                  boxSizing: 'border-box'
                 }}
               >
                 <Plus size={22} /> Generar mi Ruta
@@ -755,7 +1046,8 @@ export default function MisRutas({ volver, seleccionarLugar }: MisRutasProps) {
                 justifyContent: 'center',
                 alignItems: 'center',
                 zIndex: 9999,
-                padding: '16px'
+                padding: '16px',
+                boxSizing: 'border-box'
               }}>
                 <form 
                   onSubmit={handleCrearRutaManual} 
@@ -771,7 +1063,8 @@ export default function MisRutas({ volver, seleccionarLugar }: MisRutasProps) {
                     maxWidth: '720px', 
                     maxHeight: '90vh', 
                     overflowY: 'auto',
-                    border: '1px solid #f0e2e2'
+                    border: '1px solid #f0e2e2',
+                    boxSizing: 'border-box'
                   }}
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f4eae8', paddingBottom: '12px' }}>
@@ -793,7 +1086,7 @@ export default function MisRutas({ volver, seleccionarLugar }: MisRutasProps) {
                     </button>
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 0.9fr', gap: '12px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
                     <div>
                       <label style={{ fontSize: '12px', fontWeight: 700, color: '#2d1515', display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '6px' }}>
                         <Flag size={13} color="#B3282D" /> Nombre
@@ -803,7 +1096,7 @@ export default function MisRutas({ volver, seleccionarLugar }: MisRutasProps) {
                         onChange={e => setNombreNuevaRuta(e.target.value)} 
                         required 
                         placeholder="Mi ruta en Cholula" 
-                        style={{ width: '100%', padding: '10px 12px', borderRadius: '12px', border: '1.5px solid #e8deda', fontSize: '13px', outline: 'none', backgroundColor: '#faf6f5' }} 
+                        style={{ width: '100%', padding: '10px 12px', borderRadius: '12px', border: '1.5px solid #e8deda', fontSize: '13px', outline: 'none', backgroundColor: '#faf6f5', boxSizing: 'border-box' }} 
                       />
                     </div>
                     <div>
@@ -817,7 +1110,7 @@ export default function MisRutas({ volver, seleccionarLugar }: MisRutasProps) {
                         value={fechaInicioRuta} 
                         onChange={e => setFechaInicioRuta(e.target.value)} 
                         required 
-                        style={{ width: '100%', padding: '10px 12px', borderRadius: '12px', border: '1.5px solid #e8deda', fontSize: '13px', outline: 'none', backgroundColor: '#faf6f5' }} 
+                        style={{ width: '100%', padding: '10px 12px', borderRadius: '12px', border: '1.5px solid #e8deda', fontSize: '13px', outline: 'none', backgroundColor: '#faf6f5', boxSizing: 'border-box' }} 
                       />
                     </div>
                     <div>
@@ -896,7 +1189,8 @@ export default function MisRutas({ volver, seleccionarLugar }: MisRutasProps) {
                                 boxShadow: seleccionado ? '0 4px 12px rgba(179, 40, 45, 0.25)' : '0 2px 4px rgba(0,0,0,0.01)',
                                 transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
                                 textAlign: 'left',
-                                width: '100%'
+                                width: '100%',
+                                boxSizing: 'border-box'
                               }}
                             >
                               <span style={{ 
@@ -956,7 +1250,8 @@ export default function MisRutas({ volver, seleccionarLugar }: MisRutasProps) {
                                   boxShadow: seleccionado ? '0 4px 12px rgba(179, 40, 45, 0.25)' : '0 2px 4px rgba(0,0,0,0.01)',
                                   transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
                                   textAlign: 'left',
-                                  width: '100%'
+                                  width: '100%',
+                                  boxSizing: 'border-box'
                                 }}
                               >
                                 <span style={{ 
@@ -1019,7 +1314,8 @@ export default function MisRutas({ volver, seleccionarLugar }: MisRutasProps) {
                                 boxShadow: seleccionado ? '0 4px 12px rgba(179, 40, 45, 0.25)' : '0 2px 4px rgba(0,0,0,0.01)',
                                 transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
                                 textAlign: 'left',
-                                width: '100%'
+                                width: '100%',
+                                boxSizing: 'border-box'
                               }}
                             >
                               <span style={{ 
@@ -1053,7 +1349,7 @@ export default function MisRutas({ volver, seleccionarLugar }: MisRutasProps) {
                     <label style={{ fontSize: '12.5px', fontWeight: 800, color: '#2d1515', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
                       <Utensils size={14} color="#B3282D" /> Gastronomía ({gastronomiaSeleccionada.length})
                     </label>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', maxHeight: '130px', overflowY: 'auto' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px', maxHeight: '130px', overflowY: 'auto' }}>
                       <div>
                         <div style={{ fontWeight: '800', fontSize: '10.5px', color: '#B3282D', textTransform: 'uppercase', marginBottom: '4px' }}>Platillos</div>
                         {platillosDisponibles.map(p => {
@@ -1081,7 +1377,8 @@ export default function MisRutas({ volver, seleccionarLugar }: MisRutasProps) {
                                 border: seleccionado ? '1.5px solid #B3282D' : '1.5px solid #e8d6d2',
                                 textAlign: 'left',
                                 width: '100%',
-                                transition: 'all 0.2s'
+                                transition: 'all 0.2s',
+                                boxSizing: 'border-box'
                               }}
                             >
                               <span style={{ width: '14px', height: '14px', borderRadius: '3px', background: seleccionado ? '#fff' : 'transparent', border: seleccionado ? 'none' : '1.5px solid #ccc', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#B3282D', fontSize: '10px', fontWeight: 'bold', flexShrink: 0 }}>{seleccionado ? '✓' : ''}</span>
@@ -1117,7 +1414,8 @@ export default function MisRutas({ volver, seleccionarLugar }: MisRutasProps) {
                                 border: seleccionado ? '1.5px solid #B3282D' : '1.5px solid #e8d6d2',
                                 textAlign: 'left',
                                 width: '100%',
-                                transition: 'all 0.2s'
+                                transition: 'all 0.2s',
+                                boxSizing: 'border-box'
                               }}
                             >
                               <span style={{ width: '14px', height: '14px', borderRadius: '3px', background: seleccionado ? '#fff' : 'transparent', border: seleccionado ? 'none' : '1.5px solid #ccc', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#B3282D', fontSize: '10px', fontWeight: 'bold', flexShrink: 0 }}>{seleccionado ? '✓' : ''}</span>
@@ -1130,7 +1428,7 @@ export default function MisRutas({ volver, seleccionarLugar }: MisRutasProps) {
                   </div>
 
                   {/* Acciones Modal */}
-                  <div style={{ display: 'flex', gap: '12px', marginTop: '4px' }}>
+                  <div style={{ display: 'flex', gap: '12px', marginTop: '4px', flexWrap: 'wrap' }}>
                     <button 
                       type="submit" 
                       style={{ 
@@ -1144,7 +1442,8 @@ export default function MisRutas({ volver, seleccionarLugar }: MisRutasProps) {
                         cursor: 'pointer', 
                         flex: 1,
                         boxShadow: '0 8px 20px rgba(179, 40, 45, 0.25)',
-                        transition: 'transform 0.1s ease'
+                        transition: 'transform 0.1s ease',
+                        boxSizing: 'border-box'
                       }}
                     >
                       Guardar e Iniciar Ruta
@@ -1162,7 +1461,8 @@ export default function MisRutas({ volver, seleccionarLugar }: MisRutasProps) {
                         fontSize: '14px', 
                         cursor: 'pointer', 
                         flex: 0.5,
-                        transition: 'background-color 0.2s'
+                        transition: 'background-color 0.2s',
+                        boxSizing: 'border-box'
                       }}
                     >
                       Cancelar
@@ -1172,7 +1472,31 @@ export default function MisRutas({ volver, seleccionarLugar }: MisRutasProps) {
               </div>
             )}
 
-            <h2 className="seccion-titulo">Tus itinerarios</h2>
+            <div style={{ marginBottom: '18px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap', marginBottom: '14px' }}>
+                <div>
+                  <h2 className="seccion-titulo" style={{ margin: 0 }}>Tus itinerarios</h2>
+                  <p style={{ margin: '5px 0 0', color: '#766967', fontSize: '13px' }}>
+                    {rutas.length} {rutas.length === 1 ? 'ruta creada' : 'rutas creadas'}
+                  </p>
+                </div>
+                {rutas.length > 1 && (
+                  <label style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', padding: '6px 9px', border: '1px solid #eadbd8', borderRadius: '10px', background: '#fff', color: '#705b58', fontSize: '12px' }}>
+                    <CalendarDays size={15} color="#8e2025" />
+                    <span>Fecha:</span>
+                    <select
+                      aria-label="Ordenar rutas por fecha de creación"
+                      value={ordenRutas}
+                      onChange={e => setOrdenRutas(e.target.value as 'recientes' | 'antiguas')}
+                      style={{ maxWidth: '155px', border: 'none', outline: 'none', background: 'transparent', color: '#3f2927', fontSize: '12px', cursor: 'pointer' }}
+                    >
+                      <option value="recientes">Más recientes</option>
+                      <option value="antiguas">Más antiguas</option>
+                    </select>
+                  </label>
+                )}
+              </div>
+            </div>
 
             {rutas.length === 0 ? (
               <div className="empty-state">
@@ -1181,20 +1505,24 @@ export default function MisRutas({ volver, seleccionarLugar }: MisRutasProps) {
                 <p>Explora lugares en la aplicación o genera tu ruta para comenzar.</p>
               </div>
             ) : (
-              <div className="rutas-lista" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                {rutas.map(ruta => (
+              <div className="rutas-lista" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 330px), 1fr))', gap: '14px' }}>
+                {rutasFiltradas.map(ruta => (
                   <div
                     key={ruta.id_ruta}
                     className="ruta-card"
                     style={{
                       display: 'flex',
-                      alignItems: 'center',
+                      alignItems: 'flex-start',
                       padding: '18px',
-                      borderRadius: '16px',
-                      backgroundColor: '#fff',
-                      boxShadow: '0 4px 16px rgba(0,0,0,0.06)',
+                      borderRadius: '18px',
+                      background: 'linear-gradient(145deg, #ffffff 0%, #fffafa 100%)',
+                      boxShadow: '0 6px 20px rgba(70, 20, 20, 0.07)',
                       cursor: 'pointer',
-                      border: ruta.completada ? '1px solid #4caf50' : '1px solid #f0e0e0'
+                      border: ruta.completada ? '1px solid #b7dfbd' : '1px solid #f0e0e0',
+                      gap: '12px',
+                      minWidth: 0,
+                      transition: 'transform .2s ease, box-shadow .2s ease',
+                      boxSizing: 'border-box'
                     }}
                     onClick={() => seleccionarRuta(ruta)}
                   >
@@ -1207,63 +1535,70 @@ export default function MisRutas({ volver, seleccionarLugar }: MisRutasProps) {
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        marginRight: '16px',
-                        boxShadow: '0 4px 10px rgba(0,0,0,0.1)'
+                        marginRight: '12px',
+                        boxShadow: '0 4px 10px rgba(0,0,0,0.1)',
+                        flexShrink: 0
                       }}
                     >
                       {ruta.completada ? <Check size={24} color="#fff" /> : <Route size={24} color="#fff" />}
                     </div>
-                    <div className="ruta-card-info" style={{ flex: 1 }}>
-                      <h3 style={{ margin: '0 0 4px 0', fontSize: '18px', color: '#2d1515' }}>{ruta.nombre}</h3>
-                      <p style={{ margin: '0 0 8px 0', fontSize: '14px', color: '#6e6462' }}>
+                    <div className="ruta-card-info" style={{ flex: 1, minWidth: 0 }}>
+                      <h3 style={{ margin: '0 0 4px 0', fontSize: '18px', color: '#2d1515', wordBreak: 'break-word' }}>{ruta.nombre}</h3>
+                      <p style={{ margin: '0 0 8px 0', fontSize: '14px', color: '#6e6462', wordBreak: 'break-word' }}>
                         {ruta.descripcion || 'Ruta personalizada de exploración.'}
                       </p>
-                      <span className="ruta-duracion" style={{ fontSize: '12px', fontWeight: 'bold', color: ruta.completada ? '#2e7d32' : '#B3282D', backgroundColor: '#fdf5f5', padding: '4px 10px', borderRadius: '20px', display: 'inline-block' }}>
-                        {ruta.duracion_dias} Día(s) planeados {ruta.completada ? '• Completada' : ''}
-                      </span>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '7px', marginBottom: '10px' }}>
+                        <span className="ruta-duracion" style={{ fontSize: '11px', fontWeight: 700, color: ruta.completada ? '#286d37' : '#8e2025', backgroundColor: ruta.completada ? '#eaf6ec' : '#fff0ef', padding: '6px 9px', borderRadius: '999px', display: 'inline-block' }}>
+                          {ruta.completada ? 'Completada' : 'Pendiente'}
+                        </span>
+                        <span style={{ fontSize: '11px', fontWeight: 700, color: '#5f4c4a', background: '#f5efed', padding: '6px 9px', borderRadius: '999px' }}>
+                          {ruta.duracion_dias} {ruta.duracion_dias === 1 ? 'día planeado' : 'días planeados'}
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', color: '#766967', fontSize: '11px', marginTop: '4px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <CalendarDays size={13} color="#B3282D" />
+                          <span>{obtenerFechaCreacionRuta(ruta) ? `Creada el ${formatearFecha(obtenerFechaCreacionRuta(ruta)!)}` : 'Fecha de creación no disponible'}</span>
+                        </div>
+                        {obtenerFechaEdicionRuta(ruta) &&
+                          (!obtenerFechaCreacionRuta(ruta) || obtenerFechaEdicionRuta(ruta)!.getTime() > obtenerFechaCreacionRuta(ruta)!.getTime() + 2000) &&
+                          (!obtenerFechaCompletadaRuta(ruta) || Math.abs(obtenerFechaEdicionRuta(ruta)!.getTime() - obtenerFechaCompletadaRuta(ruta)!.getTime()) > 2000) && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <Calendar size={13} color="#8b7774" />
+                            <span>Editada el {formatearFecha(obtenerFechaEdicionRuta(ruta)!)}</span>
+                          </div>
+                        )}
+                        {ruta.completada && obtenerFechaCompletadaRuta(ruta) && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#286d37' }}>
+                            <CheckCircle size={13} color="#2e7d32" />
+                            <span>Terminada el {formatearFecha(obtenerFechaCompletadaRuta(ruta)!)}</span>
+                          </div>
+                        )}
+                      </div>
                     </div>
 
-                    <button
-                      className="icon-btn"
-                      title="Duplicar esta ruta"
-                      onClick={(e) => clonarRuta(ruta.id_ruta, e)}
-                      style={{
-                        background: '#fdf5f5',
-                        border: 'none',
-                        borderRadius: '50%',
-                        padding: '10px',
-                        marginRight: '8px',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        transition: 'background 0.2s'
-                      }}
-                    >
-                      <Copy size={18} color="#B3282D" />
-                    </button>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                      <button
+                        className="icon-btn"
+                        title="Eliminar esta ruta"
+                        onClick={(e) => eliminarRutaCompleta(ruta.id_ruta, e)}
+                        style={{
+                          background: '#fdf5f5',
+                          border: 'none',
+                          borderRadius: '50%',
+                          padding: '10px',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          transition: 'background 0.2s'
+                        }}
+                      >
+                        <Trash2 size={18} color="#B3282D" />
+                      </button>
 
-                    <button
-                      className="icon-btn"
-                      title="Eliminar esta ruta"
-                      onClick={(e) => eliminarRutaCompleta(ruta.id_ruta, e)}
-                      style={{
-                        background: '#fdf5f5',
-                        border: 'none',
-                        borderRadius: '50%',
-                        padding: '10px',
-                        marginRight: '10px',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        transition: 'background 0.2s'
-                      }}
-                    >
-                      <Trash2 size={18} color="#B3282D" />
-                    </button>
-
-                    <ChevronRight size={22} color="#B3282D" />
+                      <ChevronRight size={22} color="#B3282D" />
+                    </div>
                   </div>
                 ))}
               </div>
